@@ -9,7 +9,7 @@ RUN apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 && \
 ADD test /tmp/test
 RUN bats /tmp/test
 
-VOLUME ["/var/lib/postgresql"]
+VOLUME ["/data/db"]
 EXPOSE 27017
 
 CMD /usr/bin/mongod --dbpath /data/db --auth
