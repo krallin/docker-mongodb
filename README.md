@@ -11,7 +11,7 @@ MongoDB on Docker
 
 ### Specifying a password at runtime
 
-    docker run -P quay.io/aptible/mongodb /bin/sh -c "/usr/bin/mongod --dbpath /data/db --fork --syslog && mongo --eval \"db.addUser('username', 'password')\""
+    docker run -P quay.io/aptible/mongodb /bin/sh -c "/usr/bin/mongod --dbpath /data/db --fork --logpath /dev/null && mongo --eval \"db.addUser('username', 'password')\""
 
 ## Available Tags
 

@@ -12,4 +12,4 @@ RUN bats /tmp/test
 VOLUME ["/var/lib/postgresql"]
 EXPOSE 27017
 
-CMD ["/usr/bin/mongod --dbpath /data/db --auth"]
+CMD /usr/bin/mongod --dbpath /data/db --auth
