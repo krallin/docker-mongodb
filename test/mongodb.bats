@@ -2,7 +2,7 @@
 
 @test "It should install mongod " {
   run mongod --version
-  [[ "$output" =~ "db version v2.6.8"  ]]
+  [[ "$output" =~ "db version v2.6.9"  ]]
 }
 
 @test "It should install mongod to /usr/bin/mongod" {
