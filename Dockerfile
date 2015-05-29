@@ -15,4 +15,5 @@ VOLUME ["$DATA_DIRECTORY"]
 EXPOSE 27017
 
 ADD run-database.sh /usr/bin/
+ADD utilities.sh /usr/bin/
 ENTRYPOINT ["run-database.sh"]
