@@ -19,6 +19,7 @@ The first command sets up a data container named `data` which will hold the conf
 ## Available Tags
 
 * `latest`: Currently MongoDB 2.6.0
+* `2.6.0`: MongoDB 2.6.0
 
 ## Tests
 
