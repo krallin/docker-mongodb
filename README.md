@@ -1,6 +1,7 @@
 # ![](https://gravatar.com/avatar/11d3bc4c3163e3d238d558d5c9d98efe?s=64) aptible/mongodb
-
 [![Docker Repository on Quay.io](https://quay.io/repository/aptible/mongodb/status)](https://quay.io/repository/aptible/mongodb)
+
+[![](http://dockeri.co/image/aptible/mongodb)](https://registry.hub.docker.com/u/aptible/mongodb/)
 
 MongoDB on Docker
 
@@ -18,8 +19,8 @@ The first command sets up a data container named `data` which will hold the conf
 
 ## Available Tags
 
-* `latest`: Currently MongoDB 2.6.0
-* `2.6.0`: MongoDB 2.6.0
+* `latest`: Currently MongoDB 2.6.10
+* `2.6`: MongoDB 2.6.10
 
 ## Tests
 
@@ -32,6 +33,12 @@ Tests are run as part of the `Dockerfile` build. To execute them separately with
 To push the Docker image to Quay, run the following command:
 
     make release
+
+## Continuous Integration
+
+Images are built and pushed to Docker Hub on every deploy. Because Quay currently only supports build triggers where the Docker tag name exactly matches a GitHub branch/tag name, we must run the following script to synchronize all our remote branches after a merge to master:
+
+    make sync-branches
 
 ## Copyright and License
 
