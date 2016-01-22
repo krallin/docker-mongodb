@@ -1,6 +1,7 @@
 FROM quay.io/aptible/debian:wheezy
 
 ENV MONGO_VERSION 2.6.11
+ENV MONGO_SHA1SUM b85fe1e7c1ba96097dd63d263eb70e167c04805d
 
 # Compile and install MongoDB "core"
 ADD ./install-mongodb.sh /install-mongodb.sh

@@ -6,7 +6,6 @@ set -o pipefail
 MONGO_NAME="mongodb-src-r${MONGO_VERSION}"
 MONGO_ARCHIVE="${MONGO_NAME}.tar.gz"
 MONGO_URL="https://fastdl.mongodb.org/src/${MONGO_ARCHIVE}"
-MONGO_PACKAGE="$(basename "${MONGO_URL}")"
 MONGO_BUILD_DEPS=(build-essential scons libssl-dev wget checkinstall)
 MONGO_INSTALL_GROUP="core"
 
@@ -22,6 +21,7 @@ mkdir "${mongo_build_dir}"
 cd "${mongo_build_dir}"
 
 wget "${MONGO_URL}"
+echo "${MONGO_SHA1SUM}  ${MONGO_ARCHIVE}" | sha1sum -c -
 tar -xf "${MONGO_ARCHIVE}"
 cd "${MONGO_NAME}"
 
