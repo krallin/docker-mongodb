@@ -9,7 +9,7 @@ RUN /install-mongodb.sh
 # Install MongoDB tools (we're not compiling those from source)
 ADD templates/mongodb.list /etc/apt/sources.list.d/mongodb.list
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 && \
-    apt-install "mongodb-org-tools=${MONGO_VERSION}" procps ca-certificates
+    apt-install "mongodb-org-tools=${MONGO_VERSION}" procps ca-certificates python
 
 ENV MONGO_SSL_MODE preferSSL
 ENV DATA_DIRECTORY /var/db
@@ -18,6 +18,7 @@ RUN mkdir -p "${DATA_DIRECTORY}" "${SSL_DIRECTORY}"
 
 # Tools
 ADD run-database.sh /usr/bin/
+ADD parse_mongo_url.py /usr/bin/
 ADD utilities.sh /usr/bin/
 
 # Integration tests
