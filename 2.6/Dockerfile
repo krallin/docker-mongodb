@@ -11,6 +11,7 @@ ADD templates/mongodb.list /etc/apt/sources.list.d/mongodb.list
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv 7F0CEB10 && \
     apt-install "mongodb-org-tools=${MONGO_VERSION}" procps ca-certificates
 
+ENV MONGO_SSL_MODE preferSSL
 ENV DATA_DIRECTORY /var/db
 ENV SSL_DIRECTORY /etc/ssl/mongo
 RUN mkdir -p "${DATA_DIRECTORY}" "${SSL_DIRECTORY}"
