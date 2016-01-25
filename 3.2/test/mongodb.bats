@@ -41,22 +41,21 @@ wait_for_mongodb() {
 
 @test "It should install mongod" {
   run mongod --version
-  [[ "$output" =~ "db version v2.6.11"  ]]
+  [[ "$output" =~ "db version v3.2.1"  ]]
 }
 
-@test "It should install mongo tools to /usr/local/bin" {
-  test -x /usr/local/bin/mongod
-  test -x /usr/local/bin/mongo
-  test -x /usr/local/bin/mongorestore
-  test -x /usr/local/bin/mongodump
+@test "It should install mongo tools to /usr/bin" {
+  test -x /usr/bin/mongod
+  test -x /usr/bin/mongo
+  test -x /usr/bin/mongorestore
+  test -x /usr/bin/mongodump
 }
 
-@test "It should accept non-SSL connections" {
+@test "It should reject non-SSL connections" {
   initialize_mongodb
   wait_for_mongodb
   run run-database.sh --client "$DATABASE_URL_NO_SSL" --eval "$QUERY"
-  [ "$status" -eq "0" ]
-  [[ "$output" =~ "[ ]" ]]
+  [ "$status" -ne "0" ]
 }
 
 @test "It should accept SSL connections" {
