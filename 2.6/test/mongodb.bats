@@ -35,8 +35,8 @@ initialize_mongodb() {
 }
 
 wait_for_mongodb() {
-  run-database.sh > $BATS_TEST_DIRNAME/mongodb.log &
-  while  ! grep "waiting for connections" $BATS_TEST_DIRNAME/mongodb.log ; do sleep 0.1; done
+  run-database.sh > "$BATS_TEST_DIRNAME/mongodb.log" &
+  timeout 4 sh -c "while  ! grep 'waiting for connections' '$BATS_TEST_DIRNAME/mongodb.log' ; do sleep 0.1; done"
 }
 
 @test "It should install mongod" {
@@ -73,10 +73,10 @@ wait_for_mongodb() {
   initialize_mongodb
   wait_for_mongodb
 
-  run run-database.sh --client "$DATABASE_URL" --eval "db.test.insert({\"$test_data\": null})"
-  run run-database.sh --dump "$DATABASE_URL" > "$BATS_TEST_DIRNAME/backup"
-  run run-database.sh --client "$DATABASE_URL" --eval "db.dropDatabase()"
-  run run-database.sh --restore "$DATABASE_URL" < "$BATS_TEST_DIRNAME/backup"
+  run-database.sh --client "$DATABASE_URL" --eval "db.test.insert({\"$test_data\": null})"
+  run-database.sh --dump "$DATABASE_URL" > "$BATS_TEST_DIRNAME/backup"
+  run-database.sh --client "$DATABASE_URL" --eval "db.dropDatabase()"
+  run-database.sh --restore "$DATABASE_URL" < "$BATS_TEST_DIRNAME/backup"
 
   run run-database.sh --client "$DATABASE_URL" --eval "printjson(db.test.find()[0])"
   [ "$status" -eq "0" ]

@@ -1,6 +1,14 @@
 #!/bin/bash
+set -o errexit
+set -o nounset
+set -o pipefail
 
 . /usr/bin/utilities.sh
+
+# Empty defaults to support [[ -n ... ]] checks with -o nounset.
+: ${SSL_CERTIFICATE:=""}
+: ${SSL_KEY:=""}
+
 
 function startMongod() {
   SUBJ="/C=US/ST=New York/L=New York/O=Example/CN=mongodb.example.com"
@@ -14,7 +22,12 @@ function startMongod() {
 }
 
 dump_directory="mongodump"
-if [[ "$1" == "--initialize" ]]; then
+
+
+if [[ "$#" -eq 0 ]]; then
+  startMongod
+
+elif [[ "$1" == "--initialize" ]]; then
   mkdir -p "$SSL_DIRECTORY"
 
   if [ -n "$SSL_CERTIFICATE" ] && [ -n "$SSL_KEY" ]; then
@@ -31,25 +44,34 @@ if [[ "$1" == "--initialize" ]]; then
   while [ -s "$DATA_DIRECTORY"/mongod.lock ]; do sleep 0.1; done
 
 elif [[ "$1" == "--client" ]]; then
-  [ -z "$2" ] && echo "docker run -it aptible/mongodb --client mongodb://..." && exit
+  if [[ "$#" -lt 2 ]]; then
+    echo "docker run -it aptible/mongodb --client mongodb://... [...]"
+    exit 1
+  fi
   parse_url "$2"
   shift
   shift
   exec mongo $mongo_options "$database" "$@"
 
 elif [[ "$1" == "--dump" ]]; then
-  [ -z "$2" ] && echo "docker run aptible/mongodb --dump mongodb://... > dump.mongo" && exit
+  if [[ "$#" -ne 2 ]]; then
+    echo "docker run aptible/mongodb --dump mongodb://... > dump.mongo"
+    exit 1
+  fi
   # https://jira.mongodb.org/browse/SERVER-7860
   # Can't dump the whole database to stdout in a straightforward way. Instead,
   # dump to a directory and then tar the directory and print the tar to stdout.
   parse_url "$2"
-  exec mongodump $mongo_options --db="$database" --out=/tmp/"$dump_directory" > /dev/null && tar cf - -C /tmp/ "$dump_directory"
+  mongodump $mongo_options --db="$database" --out="/tmp/${dump_directory}" > /dev/null && tar cf - -C /tmp/ "$dump_directory"
 
 elif [[ "$1" == "--restore" ]]; then
-  [ -z "$2" ] && echo "docker run -i aptible/mongodb --restore mongodb://... < dump.mongo" && exit
+  if [[ "$#" -ne 2 ]]; then
+    echo "docker run -i aptible/mongodb --restore mongodb://... < dump.mongo"
+    exit 1
+  fi
   tar xf - -C /tmp/
   parse_url "$2"
-  exec mongorestore $mongo_options --db="$database" /tmp/"$dump_directory"/"$database"
+  mongorestore $mongo_options --db="$database" "/tmp/${dump_directory}/${database}"
 
 elif [[ "$1" == "--readonly" ]]; then
   # MongoDB only supports read-only mode on a per-user basis. To make that
@@ -65,8 +87,8 @@ elif [[ "$1" == "--readonly" ]]; then
   # With all of that said, leaving off read-only mode for now.
   echo "This image does not support read-only mode. Starting database normally."
   startMongod
-
 else
-  startMongod
+  echo "Unrecognized command: $1"
+  exit 1
 
 fi

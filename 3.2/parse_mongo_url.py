@@ -3,7 +3,7 @@
 The output from this script is meant to be eval'd by a shell to parse out MongoDB options
 from a connection string.
 
->>> mongo_url = "mongodb://aptible:foobar@localhost:123/db?uri.ssl=true&uri.x-sslVerify=false"
+>>> mongo_url = urlparse.urlparse("mongodb://aptible:foobar@localhost:123/db?uri.ssl=true&uri.x-sslVerify=false")
 >>> options = prepare_options(mongo_url)
 >>> assert options["host"] == "localhost"
 >>> assert options["port"] == 123
@@ -12,7 +12,7 @@ from a connection string.
 >>> assert "--sslAllowInvalidCertificates" in options["mongo_options"]
 >>> assert "--ssl" in options["mongo_options"]
 
->>> mongo_url = "mongodb://aptible:foobar@localhost:123/db?uri.ssl=true"
+>>> mongo_url = urlparse.urlparse("mongodb://aptible:foobar@localhost:123/db?uri.ssl=true")
 >>> options = prepare_options(mongo_url)
 >>> assert "--sslAllowInvalidCertificates" not in options["mongo_options"]
 >>> assert "--ssl" in options["mongo_options"]
@@ -48,10 +48,7 @@ def qs_checks_ssl(qs):
     return True
 
 
-def prepare_options(mongo_url):
-    # Parse out everything we need.
-    u = urlparse.urlparse(mongo_url)
-
+def prepare_options(u):
     qs = urlparse.parse_qs(u.query)
     use_ssl = qs_uses_ssl(qs)
     check_ssl = qs_checks_ssl(qs)
@@ -81,9 +78,19 @@ def prepare_options(mongo_url):
     }
 
 
+def sanity_check(u):
+    if u.hostname is None:
+        print >> sys.stderr, "URL must include hostname"
+        sys.exit(1)
+
+
 def main(mongo_url):
+    u = urlparse.urlparse(mongo_url)
+
+    sanity_check(u)
+
     # And now provide this to the shell
-    for k, v in prepare_options(mongo_url).items():
+    for k, v in prepare_options(u).items():
         print "{0}={1}".format(k, quote(str(v)))
 
 

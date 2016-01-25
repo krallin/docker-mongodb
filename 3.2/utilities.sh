@@ -1,5 +1,6 @@
 #!/bin/bash
 
 parse_url() {
-  eval "$(parse_mongo_url.py "$1")"
+  mongo_params="$(parse_mongo_url.py "$1")"
+  eval "$mongo_params"
 }
