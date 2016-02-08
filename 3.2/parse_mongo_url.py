@@ -3,7 +3,7 @@
 The output from this script is meant to be eval'd by a shell to parse out MongoDB options
 from a connection string.
 
->>> mongo_url = urlparse.urlparse("mongodb://aptible:foobar@localhost:123/db?uri.ssl=true&uri.x-sslVerify=false")
+>>> mongo_url = urlparse.urlparse("mongodb://aptible:foobar@localhost:123/db?ssl=true&x-sslVerify=false")
 >>> options = prepare_options(mongo_url)
 >>> assert options["host"] == "localhost"
 >>> assert options["port"] == 123
@@ -12,7 +12,7 @@ from a connection string.
 >>> assert "--sslAllowInvalidCertificates" in options["mongo_options"]
 >>> assert "--ssl" in options["mongo_options"]
 
->>> mongo_url = urlparse.urlparse("mongodb://aptible:foobar@localhost:123/db?uri.ssl=true")
+>>> mongo_url = urlparse.urlparse("mongodb://aptible:foobar@localhost:123/db?ssl=true")
 >>> options = prepare_options(mongo_url)
 >>> assert "--sslAllowInvalidCertificates" not in options["mongo_options"]
 >>> assert "--ssl" in options["mongo_options"]
@@ -29,9 +29,9 @@ SSL_CA_FILE = "/etc/ssl/certs/ca-certificates.crt"
 
 def qs_uses_ssl(qs):
     """
-    By default, we don't use SSL. If ?uri.ssl=true is found, we do.
+    By default, we don't use SSL. If ?ssl=true is found, we do.
     """
-    for ssl_value in qs.get('uri.ssl', []):
+    for ssl_value in qs.get('ssl', []):
         if ssl_value == "true":
             return True
     return False
@@ -39,10 +39,10 @@ def qs_uses_ssl(qs):
 
 def qs_checks_ssl(qs):
     """
-    By default, we check SSL certificate validity. If ?uri.x-sslVerify=false is found, we don't.
+    By default, we check SSL certificate validity. If ?x-sslVerify=false is found, we don't.
     We prepend x- to the option because it's non-standard in MongoDB connection strings.
     """
-    for check_ssl_value in qs.get("uri.x-sslVerify", []):
+    for check_ssl_value in qs.get("x-sslVerify", []):
         if check_ssl_value == "false":
             return False
     return True

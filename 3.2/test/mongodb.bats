@@ -9,7 +9,7 @@ setup() {
   export DATABASE_USER="aptible"
   export DATABASE_PASSWORD="password12345"
   export DATABASE_URL_NO_SSL="mongodb://$DATABASE_USER:$DATABASE_PASSWORD@localhost/db"
-  export DATABASE_URL="$DATABASE_URL_NO_SSL?uri.ssl=true&uri.x-sslVerify=false"
+  export DATABASE_URL="$DATABASE_URL_NO_SSL?ssl=true&x-sslVerify=false"
   rm -rf "$DATA_DIRECTORY"
   rm -rf "$SSL_DIRECTORY"
   mkdir -p "$DATA_DIRECTORY"
