@@ -14,7 +14,7 @@ MongoDB on Docker
 This is an image conforming to the [Aptible database specification](https://support.aptible.com/topics/paas/deploy-custom-database/). To run a server for development purposes, execute
 
     docker create --name data quay.io/aptible/mongodb
-    docker run --volumes-from data -e USERNAME=aptible -e PASSPHRASE=pass -e DB=db quay.io/aptible/mongodb --initialize
+    docker run --volumes-from data -e USERNAME=aptible -e PASSPHRASE=pass -e DATABASE=db quay.io/aptible/mongodb --initialize
     docker run --volumes-from data -P quay.io/aptible/mongodb
 
 The first command sets up a data container named `data` which will hold the configuration and data for the database. The second command creates a MongoDB instance with a username, passphrase and database name of your choice. The third command starts the database server.

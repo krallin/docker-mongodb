@@ -30,3 +30,12 @@ source "${BATS_TEST_DIRNAME}/test_helpers.sh"
 @test "It should pass parse_mongo_url.py unit tests" {
   python -B -m doctest /usr/bin/parse_mongo_url.py
 }
+
+@test "--discover and --connection-url should return valid JSON" {
+  run-database.sh --discover | python -c 'import sys, json; json.load(sys.stdin)'
+  CLUSTER_KEY=test PASSPHRASE=test run-database.sh --connection-url | python -c 'import sys, json; json.load(sys.stdin)'
+}
+
+@test "--connection-url should return a valid connection URL" {
+  # TODO
+}
