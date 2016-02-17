@@ -129,6 +129,21 @@ function check_ip () {
   fi
 }
 
+function validate_cluster_conf () {
+  local mongo_url="$1"
+  for attempt in $(seq 1 5); do
+    echo "Validating voting and priority configuration (from ${mongo_url}, attempt ${attempt})"
+    if [[ "$attempt" -ge 5 ]]; then
+      echo "Some members had an invalid configuration after 5 attempts"
+      exit 1
+    fi
+    if docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$mongo_url" "/tmp/test/assert-votes.js"; then
+      break
+    fi
+    sleep 2
+  done
+}
+
 
 echo "Initializing first member"
 
@@ -192,7 +207,7 @@ check_ip "$R2_CONTAINER" "$R2_IP"
 
 until docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R2_ADMIN_URL" --quiet --eval 'quit(db.isMaster()["secondary"] ? 0 : 1)'; do sleep 2; done
 
-until docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R2_ADMIN_URL" --quiet --eval 'quit(db.isMaster()["secondary"] ? 0 : 1)'; do sleep 1; done
+validate_cluster_conf "$R2_ADMIN_URL"
 
 
 echo "Initializing third member from second"
@@ -215,13 +230,14 @@ R3_ADMIN_URL="$(docker run -i "${R3_ENV_ARGS[@]}" -e "DATABASE=admin" "$IMG" --c
 until docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R3_ADMIN_URL" --quiet --eval 'quit(db.isMaster()["secondary"] ? 0 : 1)'; do sleep 2; done
 
 # And now, check that our cluster looks healthy!
+validate_cluster_conf "$R3_ADMIN_URL"
+
 echo "Cluster configuration:"
-docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R2_ADMIN_URL" --quiet --eval 'rs.conf()'
+docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R2_ADMIN_URL" --quiet --eval 'printjson(rs.conf())'
 
 echo "Cluster status:"
-docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R2_ADMIN_URL" --quiet --eval 'rs.status()'
+docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R2_ADMIN_URL" --quiet --eval 'printjson(rs.status())'
 
-echo "Checking all members have appropriate voting and priority configuration"
-docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R2_ADMIN_URL" "/tmp/test/assert-votes.js"
+# TODO: Run some more tests
 
 echo "Test OK!"
