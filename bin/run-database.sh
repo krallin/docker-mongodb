@@ -122,21 +122,30 @@ function mongo_exec_and_extract () {
 
 
 function startMongod () {
-  # TODO - Check if the replica set name exists and if not, we need to call rs initiate... (for migration)
-  # (or just start as standalone)
-  REPL_SET_NAME="$(cat "$REPL_SET_NAME_FILE")"
-
   # Run the "PRE_START_FILE" if provided
   if [ -f "$PRE_START_FILE" ]; then
     "$PRE_START_FILE"
   fi
 
-  exec mongod \
-    --dbpath "$DATA_DIRECTORY" --port "$PORT"  \
-    --sslMode "$MONGO_SSL_MODE" --sslPEMKeyFile "$SSL_DIRECTORY/mongodb.pem" \
-    --replSet "$REPL_SET_NAME" \
-    --keyFile "$CLUSTER_KEY_FILE" \
-    --auth
+  # Standalone configuration
+  local mongo_options=(
+    "--dbpath" "$DATA_DIRECTORY"
+    "--port" "$PORT"
+    "--sslMode" "$MONGO_SSL_MODE"
+    "--sslPEMKeyFile" "$SSL_DIRECTORY/mongodb.pem"
+    "--auth"
+  )
+
+  if [ -f "$REPL_SET_NAME_FILE" ]; then
+    # We have a replica set name file: expand the configuration
+    # to start as a replica set member.
+    mongo_options+=(
+      "--replSet" "$(cat "$REPL_SET_NAME_FILE")"
+      "--keyFile" "$CLUSTER_KEY_FILE"
+    )
+  fi
+
+  exec mongod "${mongo_options[@]}"
 }
 
 dump_directory="mongodump"
