@@ -189,11 +189,23 @@ for time_left in $(seq "$delay" "-${step}" 1); do
   sleep "$step"
 done
 
+# Check that R1 didn't step down
 
-if docker logs "${R1_CONTAINER}" | grep "relinquishing primary"; then
+if docker logs "$R1_CONTAINER" | grep "relinquishing primary"; then
   echo "FAIL: ${R1_CONTAINER} stepped down:"
-  docker logs "${R1_CONTAINER}"
+  docker logs "$R1_CONTAINER"
   exit 1
+fi
+
+# But also check that R1 noticed R2 was down. The log message differs in Mongo 2.x and 3.x, so
+# we test for both (2.x first, then 3.x)
+if ! docker logs "$R1_CONTAINER" | grep "${R2_CONTAINER}:${R2_PORT} is now in state DOWN"; then
+  if ! docker logs "$R1_CONTAINER" | grep "${R2_CONTAINER}:${R2_PORT}; ExceededTimeLimit"; then
+    # This isn't technically a test *failure*. However, we were unable to *demonstrate* that the
+    # system reacted properly to R2 going down for a restart, so we have to abort.
+    echo "${R1_CONTAINER} did not realize that ${R2_CONTAINER} went down - aborting test"
+    exit 1
+  fi
 fi
 
 docker run -d --name "$R2_CONTAINER" \
