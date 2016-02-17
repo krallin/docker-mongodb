@@ -32,7 +32,7 @@ opts = []
 for k, v in c.items():
   opts.append("-e")
   opts.append(pipes.quote("{0}={1}".format(k, v)))
-print "ENV_ARGS=({0})".format(" ".join(opts))
+print "ENV_ARGS+=({0})".format(" ".join(opts))
 '
 
 READ_DATABASE_URL_SCRIPT='
@@ -40,20 +40,30 @@ import sys, json
 print json.load(sys.stdin)["url"] + "&x-sslVerify=false",
 '
 
-
 USER=testuser
 PASSPHRASE=testpass
 DATABASE=db  # TODO: test with custom DB
 
+
 # ENV_ARGS will represent the configuration that Sweetness would be passing.
 # It's the suggested_configuration obtained from --discover, to which we add
 # USERNAME, DATABASE, EXPOSE_HOST and EXPOSE_PORT_XXXXX.
-# We're also throwing in ENABLE_DEBUG, because this is a test.
+
+ENV_ARGS=()
+ENV_ARGS=("-e" "USERNAME=$USER" "-e" "PASSPHRASE=$PASSPHRASE" "-e" "DATABASE=$DATABASE")
+
+# If ENABLE_DEBUG is set in our environment, we'll pass it through to the container environment,
+# enable xtrace here, and disable cleanup.
+if [[ -n "${ENABLE_DEBUG:-""}" ]]; then
+  set -o xtrace
+  ENV_ARGS+=("-e" "ENABLE_DEBUG=1")
+  trap "echo 'ENABLE_DEBUG is set, skipping cleanup'" EXIT
+fi
+
 
 echo "Importing suggested configuration"
 eval "$(docker run -i "$IMG" --discover | python -c "$READ_SUGGESTED_CONFIG_SCRIPT")"
 
-ENV_ARGS+=("-e" "USERNAME=$USER" "-e" "PASSPHRASE=$PASSPHRASE" "-e" "DATABASE=$DATABASE" -e "ENABLE_DEBUG=1")
 
 R1_ENV_ARGS+=(
   "${ENV_ARGS[@]}"
