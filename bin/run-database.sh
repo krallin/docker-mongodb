@@ -94,6 +94,33 @@ function mongo_initialize_certs () {
 }
 
 
+function mongo_exec_and_extract () {
+  # Unfortunately, MongoDB insists on logging SSL verification errors to stdout, which means
+  # we can't simply capture the output of our script. Instead, we need our script to prefix
+  # the data we're interested in, and then check that prefix.
+  local script="$1"
+  shift
+  local prefix="MONGO_EXTRACT_PREFIX:"
+  local mongo_out
+
+  # Execute the command (or script), but send in our prefix so the command / script
+  # knows what to prefix its output with so we can find it.
+  if ! mongo_out="$(mongo "$@" --eval "var extract_prefix = '$prefix';" "$script")"; then
+    # Oops, something failed. Log the output to stderr and exit.
+    echo -n "$mongo_out" > 2
+    false
+  fi
+
+  # Then do some grep & sed to extract what we actually wanted...
+  if ! echo "$mongo_out" | grep "$prefix" | sed "s/${prefix}//"; then
+    # Oops, the output didn't have the data we were interested in. Here again,
+    # log the output and exit.
+    echo -n "$mongo_out" > 2
+    false
+  fi
+}
+
+
 function startMongod () {
   # TODO - Check if the replica set name exists and if not, we need to call rs initiate... (for migration)
   # (or just start as standalone)
@@ -147,7 +174,7 @@ elif [[ "$1" == "--initialize" ]]; then
   # Initialize replica set configuration using the host we were provided. Since we're using --initialize,
   # we'll force the host _id to 0 (we're guaranteed that --initialize only runs once per replica set).
   # shellcheck disable=2086
-  mongo $mongo_options --eval "rs.initiate({_id: \"$REPL_SET_NAME\", members: [{_id: 0, host: \"${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}\"}]})['ok'] || quit(1)"
+  mongo $mongo_options --eval "var replica_set_name = '${REPL_SET_NAME}', primary_member_id = 0, primary_host = '${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}';" "/mongo-scripts/primary-initiate-replica-set.js"
 
   # Wait until MongoDB node becomes primary
   # shellcheck disable=2086
@@ -158,10 +185,7 @@ elif [[ "$1" == "--initialize" ]]; then
 
   # Create users using the connection URL that was provided
   # shellcheck disable=2086
-  {
-    mongo $mongo_options db --eval "db.createUser({\"user\":\"${USERNAME}\",\"pwd\":\"${PASSPHRASE}\",\"roles\":[\"dbOwner\"]}, {\"w\":1,\"j\":true})"
-    mongo $mongo_options admin --eval "db.createUser({\"user\":\"${USERNAME}\",\"pwd\":\"${PASSPHRASE}\",\"roles\":[\"clusterAdmin\", \"root\"]}, {\"w\":1,\"j\":true})"
-  }
+  mongo $mongo_options --eval "var user_db = '${DATABASE}', user_name = '${USERNAME}', user_passphrase = '${PASSPHRASE}';" "/mongo-scripts/primary-add-user-permissions.js"
 
   # Terminate MongoDB and wait for it to exit
   kill "$(cat "$PID_PATH")"
@@ -185,7 +209,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   # Now, get the *actual* primary from that URL
   # shellcheck disable=2154 disable=2086
-  PRIMARY_HOST_PORT="$(mongo $mongo_options admin --quiet "/mongo-scripts/secondary-find-primary.js" | grep 'PRIMARY HOST PORT:' | sed 's/PRIMARY HOST PORT://g')"
+  PRIMARY_HOST_PORT="$(mongo_exec_and_extract "/mongo-scripts/secondary-find-primary.js" $mongo_options admin)"
 
   # Reconstruct primary URL using the credentials we were provided.
   # TODO - Consider using system and keyfile creds?
@@ -206,15 +230,20 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # things like SSL errors to stdout, so we can't really just get the output of db.runCommand and expect that
   # to match out replica set name.
   # shellcheck disable=2154 disable=2086
-  REPL_SET_NAME="$(mongo $PRIMARY_OPTIONS admin --quiet "/mongo-scripts/secondary-get-replica-set-name.js" | grep 'REPLICA SET NAME:' | sed 's/REPLICA SET NAME://g')"
+  REPL_SET_NAME="$(mongo_exec_and_extract "/mongo-scripts/secondary-get-replica-set-name.js" $PRIMARY_OPTIONS admin)"
   echo "$REPL_SET_NAME" > "$REPL_SET_NAME_FILE"
 
   # Autogenerate a random member ID. This makes it easier for us to update our votes and priority later on,
   # and also happens to be required for MongoDB 2.6. Unfortunately, the member ID needs to be a rather small
   # number. We pick one at random, but on the off chance that we pick the same one twice, the commands below
   # will fail (and exit with an error), and the `--initialize-from` operation needs to be restarted.
-  # TODO - We can use a Mongo script to generate a safe one for us.
   MEMBER_ID="$(randint_8)"
+  # shellcheck disable=2086
+  until mongo $PRIMARY_OPTIONS admin --eval "var member_id = ${MEMBER_ID};" "/mongo-scripts/primary-test-member-id.js"; do
+    echo "Member ID ${MEMBER_ID} is in use - trying another one"
+    MEMBER_ID="$(randint_8)"
+  done
+
   echo "$MEMBER_ID" > "$MEMBER_ID_FILE"
 
   # Start our local MongoDB to kickstart replication. Since we have SSL either set to requireSSL or preferSSL,
@@ -230,7 +259,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   # Initate replication, from the primary Point it to the new replica we just launched.
   # shellcheck disable=2086
-  mongo $PRIMARY_OPTIONS admin --quiet --eval "rs.add({host: \"${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}\", votes: 0, priority: 0, _id: ${MEMBER_ID}})['ok'] || quit(1)"
+  mongo $PRIMARY_OPTIONS admin --quiet --eval "var secondary_member_id = $MEMBER_ID, secondary_host = '${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}';" "/mongo-scripts/primary-add-nonvoting-secondary.js"
 
   # Determine the URL this replica will acquire (and check its validity by parsing it - we'll use it later anyway)
   SECONDARY_URL="mongodb://${USERNAME}:${PASSPHRASE}@${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}/admin?ssl=true&x-sslVerify=false"

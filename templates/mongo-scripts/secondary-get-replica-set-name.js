@@ -5,4 +5,4 @@ if (!status["ok"]) {
 }
 
 var name = status["set"];
-print("REPLICA SET NAME:" + name);
+print(extract_prefix + name);

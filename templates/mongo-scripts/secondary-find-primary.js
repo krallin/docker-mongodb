@@ -10,7 +10,8 @@ for (var i = 0; i < status["members"].length; i++) {
 
 if (!primary) {
   print("Failed to locate primary!");
+  printjson(status);
   quit(1);
 } else {
-  print("PRIMARY HOST PORT:" + primary.name);
+  print(extract_prefix + primary.name);
 }
