@@ -1,0 +1,5 @@
+export MONGO_VERSION = 2.6.11
+export MONGO_SHA1SUM = b85fe1e7c1ba96097dd63d263eb70e167c04805d
+export MONGO_GPG_KEY = 7F0CEB10
+
+export MONGO_SSL_MODE = preferSSL
