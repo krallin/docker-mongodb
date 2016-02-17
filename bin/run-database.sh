@@ -180,7 +180,7 @@ elif [[ "$1" == "--initialize" ]]; then
   # shellcheck disable=2086
   until mongo $mongo_options --quiet --eval 'quit(db.isMaster()["ismaster"] ? 0 : 1)'; do
     echo "Waiting until new MongoDB instance becomes primary"
-    sleep 1
+    sleep 2
   done
 
   # Create users using the connection URL that was provided
@@ -276,7 +276,7 @@ EOM
   # shellcheck disable=2154 disable=2086
   until mongo $mongo_options "$database" --quiet --eval 'quit((db.isMaster()["ismaster"] || db.isMaster()["secondary"]) ? 0 : 1)'; do
     echo "Waiting until new MongoDB instance becomes primary or secondary"
-    sleep 1
+    sleep 2
   done
 
   # Initialization is done, terminate MongoDB

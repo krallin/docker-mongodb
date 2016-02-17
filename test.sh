@@ -150,7 +150,7 @@ check_ip "$R1_CONTAINER" "$R1_IP"
 
 # Wait until the first node becomes the master
 R1_URL="$(docker run -i "${R1_ENV_ARGS[@]}" "$IMG" --connection-url | python -c "$READ_DATABASE_URL_SCRIPT")"
-until docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R1_URL" --quiet --eval 'quit(db.isMaster()["ismaster"] ? 0 : 1)'; do sleep 1; done
+until docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R1_URL" --quiet --eval 'quit(db.isMaster()["ismaster"] ? 0 : 1)'; do sleep 2; done
 
 
 echo "Initializing second member"
@@ -190,7 +190,7 @@ docker run -d --name "$R2_CONTAINER" \
 
 check_ip "$R2_CONTAINER" "$R2_IP"
 
-# TODO: Run some more tests
+until docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R2_ADMIN_URL" --quiet --eval 'quit(db.isMaster()["secondary"] ? 0 : 1)'; do sleep 2; done
 
 until docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R2_ADMIN_URL" --quiet --eval 'quit(db.isMaster()["secondary"] ? 0 : 1)'; do sleep 1; done
 
@@ -212,7 +212,7 @@ docker run -d --name="$R3_CONTAINER" \
 check_ip "$R3_CONTAINER" "$R3_IP"
 
 R3_ADMIN_URL="$(docker run -i "${R3_ENV_ARGS[@]}" -e "DATABASE=admin" "$IMG" --connection-url | python -c "$READ_DATABASE_URL_SCRIPT")"
-until docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R3_ADMIN_URL" --quiet --eval 'quit(db.isMaster()["secondary"] ? 0 : 1)'; do sleep 1; done
+until docker run --rm -i "${IP_ARGS[@]}" "$IMG" --client "$R3_ADMIN_URL" --quiet --eval 'quit(db.isMaster()["secondary"] ? 0 : 1)'; do sleep 2; done
 
 # And now, check that our cluster looks healthy!
 echo "Cluster configuration:"

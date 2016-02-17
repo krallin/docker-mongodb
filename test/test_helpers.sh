@@ -41,7 +41,7 @@ wait_for_mongodb() {
 
   # Transition to PRIMARY shows in the log before the node is actually able to accept writes,
   # so we sleep a little bit after seeing it.
-  timeout 4 sh -c "while  ! grep 'PRIMARY' '$BATS_TEST_DIRNAME/mongodb.log' ; do sleep 0.1; done"
+  timeout 20 sh -c "while  ! grep 'PRIMARY' '$BATS_TEST_DIRNAME/mongodb.log' ; do sleep 0.1; done"
   sleep 2
 }
 
