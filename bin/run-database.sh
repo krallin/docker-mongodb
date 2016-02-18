@@ -180,6 +180,13 @@ elif [[ "$1" == "--initialize" ]]; then
 
   mongo_options="--port $PORT"
 
+  # Wait until MongoDB comes online
+  # shellcheck disable=2086
+  until mongo $mongo_options --quiet --eval 'quit(0)'; do
+    echo "Waiting until MongoDB comes online"
+    sleep 2
+  done
+
   # Initialize replica set configuration using the host we were provided. Since we're using --initialize,
   # we'll force the host _id to 0 (we're guaranteed that --initialize only runs once per replica set).
   # shellcheck disable=2086
