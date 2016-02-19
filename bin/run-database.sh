@@ -260,6 +260,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   parse_url "$FROM_URL"
 
   # Now, get the *actual* primary from that URL
+  echo "Locating replica set primary"
   # shellcheck disable=2154 disable=2086
   PRIMARY_HOST_PORT="$(mongo_exec_and_extract "/mongo-scripts/secondary-find-primary.js" $mongo_options admin)"
 
@@ -281,6 +282,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # Get the replica set name from the primary, and store it for future restarts. Unfortunately, MongoDB logs
   # things like SSL errors to stdout, so we can't really just get the output of db.runCommand and expect that
   # to match out replica set name.
+  echo "Retrieving replica set name"
   # shellcheck disable=2154 disable=2086
   REPL_SET_NAME="$(mongo_exec_and_extract "/mongo-scripts/secondary-get-replica-set-name.js" $PRIMARY_OPTIONS admin)"
   echo "$REPL_SET_NAME" > "$REPL_SET_NAME_FILE"
@@ -289,6 +291,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # and also happens to be required for MongoDB 2.6. Unfortunately, the member ID needs to be a rather small
   # number. We pick one at random, but on the off chance that we pick the same one twice, the commands below
   # will fail (and exit with an error), and the `--initialize-from` operation needs to be restarted.
+  echo "Choosing member ID"
   MEMBER_ID="$(randint_8)"
   # shellcheck disable=2086
   until mongo $PRIMARY_OPTIONS admin --eval "var member_id = ${MEMBER_ID};" "/mongo-scripts/primary-test-member-id.js"; do
@@ -306,10 +309,12 @@ elif [[ "$1" == "--initialize-from" ]]; then
   LOG_PATH=/tmp/mongod.log
   trap 'cat "$LOG_PATH"; rm "$LOG_PATH"' EXIT
 
+  echo "Starting MongoDB"
   mongo_initialize_certs
   mongod --dbpath "$DATA_DIRECTORY" --port "$PORT" --fork --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" --replSet "$REPL_SET_NAME" --keyFile "$CLUSTER_KEY_FILE" --sslMode "$MONGO_SSL_MODE" --sslPEMKeyFile "$SSL_DIRECTORY/mongodb.pem" --auth
 
   # Initate replication, from the primary Point it to the new replica we just launched.
+  echo "Registering as nonvoting secondary"
   # shellcheck disable=2086
   mongo $PRIMARY_OPTIONS admin --quiet --eval "var secondary_member_id = $MEMBER_ID, secondary_host = '${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}';" "/mongo-scripts/primary-add-nonvoting-secondary.js"
 
@@ -318,6 +323,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   parse_url "$SECONDARY_URL"
 
   # Let's tell our Mongo that it should update itself to become a voting member when it comes back up
+  echo "Preparing reconfiguration script"
   cat > "$PRE_START_FILE" <<EOM
 #!/bin/bash
 /mongo-scripts/reconfig.sh "$PRIMARY_URL" "$SECONDARY_URL" &
@@ -325,6 +331,7 @@ EOM
   chmod +x "$PRE_START_FILE"
 
   # Wait until we actually join the cluster.
+  echo "Waiting until initial synchronization completes"
   # shellcheck disable=2154 disable=2086
   until mongo $mongo_options "$database" --quiet --eval 'quit((db.isMaster()["ismaster"] || db.isMaster()["secondary"]) ? 0 : 1)'; do
     echo "Waiting until new MongoDB instance becomes primary or secondary"
