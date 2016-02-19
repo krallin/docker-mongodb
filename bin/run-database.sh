@@ -65,13 +65,42 @@ function mongo_environment_full () {
     eval "${EXPOSE_PORT_PTR}=${PORT}"
   fi
 
-  # Check that variables that do not accept defaults are properly set
-  # in the environment.
+  # Check that PASSPHRASE, which does not support defaults, is set up.
   # shellcheck disable=2086
   {
     : ${PASSPHRASE:?"PASSPHRASE must be set in the environment"}
-    : ${CLUSTER_KEY:?"CLUSTER_KEY must be set in the environment"}
   }
+}
+
+function mongo_environment_prefer_cluster_key () {
+  # For compatibility with environments where `--discover` isn't supported,
+  # we auto-generate a CLUSTER_KEY at startup, but warn that it'll need to
+  # be copied out of this instance.
+
+  if [[ "${CLUSTER_KEY:=""}" = "" ]]; then
+    echo "****************************************************************************"
+    echo
+    echo "WARNING: CLUSTER_KEY is unset. A new random one will be generated."
+    echo
+    echo "If you intended to form a new cluster around this MongoDB instance, you"
+    echo "will need to retrieve the key and ensure it is set in the environment"
+    echo "for new instances you provision. Clustering will **NOT** work otherwise."
+    echo
+    echo "The generated CLUSTER_KEY will be found in ${CLUSTER_KEY_FILE} after"
+    echo "initialization completes."
+    echo
+    echo "****************************************************************************"
+    CLUSTER_KEY="$(pwgen -s 64)"
+  fi
+}
+
+function mongo_environment_require_cluster_key () {
+  # When using --initialize-from, we *need* the CLUSTER_KEY: there's no
+  # use attempting to join a replica set we don't have the credentials ot
+  # participate in.
+
+  # shellcheck disable=2086
+  : ${CLUSTER_KEY:?"CLUSTER_KEY must be set in the environment"}
 }
 
 
@@ -160,13 +189,18 @@ if [[ "$#" -eq 0 ]]; then
 
 elif [[ "$1" == "--initialize" ]]; then
   mongo_environment_full
+  mongo_environment_prefer_cluster_key
 
   # Auto-generate replica set name. We randomize this to ensure multiple MongoDB servers have a different
   # replica set name (as recommended by MongoDB).
   REPL_SET_NAME="rs$(pwgen -s 12)"
   echo "$REPL_SET_NAME" > "$REPL_SET_NAME_FILE"
 
-  # Use the connection password for intra-cluster authentication
+  # Store the CLUSTER_KEY in a file. There are several reasons why we put it there rather than rely
+  # on the environment:
+  # + It works with a more limited environment.
+  # + The data contains the replica set configuration, which contains other members, to which we
+  #   need this key to connect anyway (IOW, the data isn't as useful without the key).
   echo "$CLUSTER_KEY" > "$CLUSTER_KEY_FILE"
   chmod 600 "$CLUSTER_KEY_FILE"
 
@@ -215,6 +249,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   # We'll need users, passwords, certificates, cluster key, etc. here. They should all come from the environment.
   mongo_environment_full
+  mongo_environment_require_cluster_key
 
   # We have no guarantee that whatever is in FROM_URL is actually the primary, so we have to actually query the primary.
   # Obviously, this is racy. If there are changes happening on the cluster while we work, we might end up sending cluster
@@ -302,7 +337,6 @@ EOM
 
 elif [[ "$1" == "--discover" ]]; then
   mongo_environment_minimal
-
   cat <<EOM
 {
   "exposed_ports": [

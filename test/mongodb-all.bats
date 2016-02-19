@@ -2,7 +2,6 @@
 
 source "${BATS_TEST_DIRNAME}/test_helpers.sh"
 
-
 @test "It should accept SSL connections" {
   initialize_mongodb
   wait_for_mongodb
@@ -39,3 +38,15 @@ source "${BATS_TEST_DIRNAME}/test_helpers.sh"
 @test "--connection-url should return a valid connection URL" {
   # TODO
 }
+
+@test "It should allow --initialize without CLUSTER_KEY" {
+  USERNAME="$DATABASE_USER" PASSPHRASE="$DATABASE_PASSWORD" DATABASE=db run run-database.sh --initialize
+  [ "$status" -eq 0 ]
+  echo "$output" | grep "WARNING: CLUSTER_KEY is unset"
+}
+
+@test "It should not allow --initialize-from without CLUSTER_KEY" {
+  USERNAME="$DATABASE_USER" PASSPHRASE="$DATABASE_PASSWORD" DATABASE=db run run-database.sh --initialize-from "mongodb://dummy:dummy@dummy@dummy/dummy"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep "CLUSTER_KEY must be set"
+ }
