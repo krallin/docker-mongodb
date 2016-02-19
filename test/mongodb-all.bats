@@ -57,3 +57,13 @@ source "${BATS_TEST_DIRNAME}/test_helpers.sh"
   [ "$status" -eq 1 ]
   echo "$output" | grep "CLUSTER_KEY must be set"
 }
+
+@test "It should start standalone without a key file" {
+  wait_for_mongodb
+  grep "STANDALONE" "$BATS_TEST_DIRNAME/mongodb.log"
+}
+
+@test "It should start standalone without a replica set name file" {
+  wait_for_mongodb
+  grep "STANDALONE" "$BATS_TEST_DIRNAME/mongodb.log"
+}

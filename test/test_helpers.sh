@@ -39,9 +39,23 @@ initialize_mongodb() {
 wait_for_mongodb() {
   run-database.sh > "$BATS_TEST_DIRNAME/mongodb.log" &
 
-  # Transition to PRIMARY shows in the log before the node is actually able to accept writes,
-  # so we sleep a little bit after seeing it.
-  timeout 20 sh -c "while  ! grep 'PRIMARY' '$BATS_TEST_DIRNAME/mongodb.log' ; do sleep 0.1; done"
-  sleep 2
+  # Try to connect as "DATABASE_USER" or without user (depending on how we started)
+  for i in $(seq 10 -1 0); do
+    if mongo --ssl --sslAllowInvalidCertificates -u "$DATABASE_USER" -p "$DATABASE_PASSWORD" db  --eval 'quit(0)'; then
+      break
+    fi
+
+    if mongo db --ssl --sslAllowInvalidCertificates --eval 'quit(0)'; then
+      break
+    fi
+
+    if [ "$i" -eq 0 ]; then
+      echo "MongoDB never came online"
+      false
+    fi
+
+    echo "Waiting until MongoDB comes online"
+    sleep 2
+  done
 }
 

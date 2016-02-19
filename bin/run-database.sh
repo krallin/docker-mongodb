@@ -165,13 +165,14 @@ function startMongod () {
     "--auth"
   )
 
-  if [ -f "$REPL_SET_NAME_FILE" ]; then
-    # We have a replica set name file: expand the configuration
-    # to start as a replica set member.
+  if [ -f "$REPL_SET_NAME_FILE" ] && [ -f "$CLUSTER_KEY_FILE" ]; then
+    # We have replica set configuration! Start with replica set options.
     mongo_options+=(
       "--replSet" "$(cat "$REPL_SET_NAME_FILE")"
       "--keyFile" "$CLUSTER_KEY_FILE"
     )
+  else
+    echo "WARNING: Starting in STANDALONE mode (${REPL_SET_NAME_FILE} or ${CLUSTER_KEY_FILE} is missing)."
   fi
 
   exec mongod "${mongo_options[@]}"
