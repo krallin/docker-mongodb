@@ -30,13 +30,20 @@ source "${BATS_TEST_DIRNAME}/test_helpers.sh"
   python -B -m doctest /usr/bin/parse_mongo_url.py
 }
 
-@test "--discover and --connection-url should return valid JSON" {
+@test "It should return valid JSON for --discover and --connection-url" {
   run-database.sh --discover | python -c 'import sys, json; json.load(sys.stdin)'
   CLUSTER_KEY=test PASSPHRASE=test run-database.sh --connection-url | python -c 'import sys, json; json.load(sys.stdin)'
 }
 
-@test "--connection-url should return a valid connection URL" {
-  # TODO
+@test "It should return a valid connection URL for --connection-url" {
+  initialize_mongodb
+  wait_for_mongodb
+
+  USERNAME="$DATABASE_USER" PASSPHRASE="$DATABASE_PASSWORD" DATABASE=db run run-database.sh --connection-url
+  [ "$status" -eq "0" ]
+  URL="$(echo "$output" | python -c "import sys, json; print json.load(sys.stdin)['url']")"
+  URL="${URL}&x-sslVerify=false"  # Certs are invalid in test, but --connection-url doesn't know that.
+  run-database.sh --client "$URL" --eval 'quit(0);'
 }
 
 @test "It should allow --initialize without CLUSTER_KEY" {
@@ -49,4 +56,4 @@ source "${BATS_TEST_DIRNAME}/test_helpers.sh"
   USERNAME="$DATABASE_USER" PASSPHRASE="$DATABASE_PASSWORD" DATABASE=db run run-database.sh --initialize-from "mongodb://dummy:dummy@dummy@dummy/dummy"
   [ "$status" -eq 1 ]
   echo "$output" | grep "CLUSTER_KEY must be set"
- }
+}
