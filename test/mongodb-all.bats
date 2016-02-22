@@ -16,8 +16,11 @@ source "${BATS_TEST_DIRNAME}/test_helpers.sh"
   initialize_mongodb
   wait_for_mongodb
 
+  wait_for_master "$DATABASE_URL"
   run-database.sh --client "$DATABASE_URL" --eval "db.test.insert({\"$test_data\": null})"
+
   run-database.sh --dump "$DATABASE_URL" > "$BATS_TEST_DIRNAME/backup"
+
   run-database.sh --client "$DATABASE_URL" --eval "db.dropDatabase()"
   run-database.sh --restore "$DATABASE_URL" < "$BATS_TEST_DIRNAME/backup"
 

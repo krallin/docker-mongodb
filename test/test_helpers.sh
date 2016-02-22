@@ -18,6 +18,9 @@ setup() {
 }
 
 teardown() {
+  # Dump log, if any (facilitates troubleshooting)
+  cat "$BATS_TEST_DIRNAME/mongodb.log" || true
+  # Actually teardown
   export DATA_DIRECTORY="$OLD_DATA_DIRECTORY"
   export SSL_DIRECTORY="$OLD_SSL_DIRECTORY"
   unset OLD_DATA_DIRECTORY
@@ -59,3 +62,13 @@ wait_for_mongodb() {
   done
 }
 
+wait_for_master() {
+  local database_url="$1"
+  for i in $(seq 10 -1 0); do
+    if run-database.sh --client "$database_url" --eval 'quit(db.isMaster()["ismaster"] ? 0 : 1)'; then
+      break
+    fi
+    echo "Waiting until MongoDB becomes master"
+    sleep 2
+  done
+}
