@@ -8,6 +8,7 @@ setup() {
   export QUERY="printjson(db.getCollectionNames())"
   export DATABASE_USER="aptible"
   export DATABASE_PASSWORD="password12345"
+  export DATABASE_CLUSTER_KEY="key1234"
   export DATABASE_URL_NO_SSL="mongodb://$DATABASE_USER:$DATABASE_PASSWORD@localhost/db"
   export DATABASE_URL="$DATABASE_URL_NO_SSL?ssl=true&x-sslVerify=false"
   rm -rf "$DATA_DIRECTORY"
@@ -17,6 +18,9 @@ setup() {
 }
 
 teardown() {
+  # Dump log, if any (facilitates troubleshooting)
+  cat "$BATS_TEST_DIRNAME/mongodb.log" || true
+  # Actually teardown
   export DATA_DIRECTORY="$OLD_DATA_DIRECTORY"
   export SSL_DIRECTORY="$OLD_SSL_DIRECTORY"
   unset OLD_DATA_DIRECTORY
@@ -24,6 +28,7 @@ teardown() {
   unset QUERY
   unset DATABASE_USER
   unset DATABASE_PASSWORD
+  unset DATABASE_CLUSTER_KEY
   unset DATABASE_URL
   PID=$(pgrep mongod) || return 0
   run pkill mongod
@@ -31,11 +36,39 @@ teardown() {
 }
 
 initialize_mongodb() {
-  USERNAME="$DATABASE_USER" PASSPHRASE="$DATABASE_PASSWORD" run-database.sh --initialize
+  USERNAME="$DATABASE_USER" CLUSTER_KEY="$DATABASE_CLUSTER_KEY" PASSPHRASE="$DATABASE_PASSWORD" DATABASE=db run-database.sh --initialize
 }
 
 wait_for_mongodb() {
   run-database.sh > "$BATS_TEST_DIRNAME/mongodb.log" &
-  timeout 4 sh -c "while  ! grep 'waiting for connections' '$BATS_TEST_DIRNAME/mongodb.log' ; do sleep 0.1; done"
+
+  # Try to connect as "DATABASE_USER" or without user (depending on how we started)
+  for i in $(seq 10 -1 0); do
+    if mongo --ssl --sslAllowInvalidCertificates -u "$DATABASE_USER" -p "$DATABASE_PASSWORD" db  --eval 'quit(0)'; then
+      break
+    fi
+
+    if mongo db --ssl --sslAllowInvalidCertificates --eval 'quit(0)'; then
+      break
+    fi
+
+    if [ "$i" -eq 0 ]; then
+      echo "MongoDB never came online"
+      false
+    fi
+
+    echo "Waiting until MongoDB comes online"
+    sleep 2
+  done
 }
 
+wait_for_master() {
+  local database_url="$1"
+  for i in $(seq 10 -1 0); do
+    if run-database.sh --client "$database_url" --eval 'quit(db.isMaster()["ismaster"] ? 0 : 1)'; then
+      break
+    fi
+    echo "Waiting until MongoDB becomes master"
+    sleep 2
+  done
+}
