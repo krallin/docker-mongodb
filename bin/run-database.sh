@@ -198,6 +198,7 @@ if [[ "$#" -eq 0 ]]; then
 
 elif [[ "$1" == "--initialize" ]]; then
   mongo_environment_full
+  mongo_initialize_certs
   mongo_environment_prefer_cluster_key
 
   # Auto-generate replica set name. We randomize this to ensure multiple MongoDB servers have a different

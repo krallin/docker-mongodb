@@ -100,7 +100,14 @@ source "${BATS_TEST_DIRNAME}/test_helpers.sh"
 
 @test "It should auto-generate certs when none are provided" {
   initialize_mongodb
+  rm "${SSL_DIRECTORY}/mongodb.key" "${SSL_DIRECTORY}/mongodb.crt"
   wait_for_mongodb
   grep "No certs found" "$BATS_TEST_DIRNAME/mongodb.log"
   curl -kv https://localhost:27017 2>&1 | grep "mongodb.example.com"
+}
+
+@test "It should read or generate certs as part of --initialize" {
+  initialize_mongodb
+  [ -f "${SSL_DIRECTORY}/mongodb.crt" ]
+  [ -f "${SSL_DIRECTORY}/mongodb.key" ]
 }
