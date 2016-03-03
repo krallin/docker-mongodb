@@ -72,3 +72,11 @@ wait_for_master() {
     sleep 2
   done
 }
+
+make_certs () {
+  local name="$1"
+  SUBJ="/C=US/ST=New York/L=New York/O=Example/CN=${name}"
+  openssl req -nodes -new -x509 -sha256 -subj "$SUBJ" \
+    -keyout "${SSL_DIRECTORY}/mongodb.key" \
+    -out "${SSL_DIRECTORY}/mongodb.crt"
+}

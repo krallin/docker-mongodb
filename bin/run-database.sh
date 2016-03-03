@@ -19,6 +19,7 @@ CLUSTER_KEY_FILE="${DATA_DIRECTORY}/.aptible-keyfile"
 MEMBER_ID_FILE="${DATA_DIRECTORY}/.aptible-member-id"
 PRE_START_FILE="${DATA_DIRECTORY}/.aptible-on-start"
 
+SSL_BUNDLE_FILE="${SSL_DIRECTORY}/mongodb.pem"
 
 function mongo_init_debug () {
   # shellcheck disable=2086
@@ -106,20 +107,25 @@ function mongo_environment_require_cluster_key () {
 
 
 function mongo_initialize_certs () {
+  local ssl_cert_file="${SSL_DIRECTORY}/mongodb.crt"
+  local ssl_key_file="${SSL_DIRECTORY}/mongodb.key"
   mkdir -p "$SSL_DIRECTORY"
 
   if [ -n "$SSL_CERTIFICATE" ] && [ -n "$SSL_KEY" ]; then
-    echo "$SSL_CERTIFICATE" > "$SSL_DIRECTORY"/mongodb.crt
-    echo "$SSL_KEY" > "$SSL_DIRECTORY"/mongodb.key
+    echo "Certs present in environment - using them"
+    echo "$SSL_CERTIFICATE" > "$ssl_cert_file"
+    echo "$SSL_KEY" > "$ssl_key_file"
+  elif [ -f "$ssl_cert_file" ] && [ -f "$ssl_key_file" ]; then
+    echo "Certs present on filesystem - using them"
   else
     echo "No certs found - autogenerating"
     SUBJ="/C=US/ST=New York/L=New York/O=Example/CN=mongodb.example.com"
     OPTS="req -nodes -new -x509 -sha256"
     # shellcheck disable=2086
-    openssl $OPTS -subj "$SUBJ" -keyout "$SSL_DIRECTORY"/mongodb.key -out "$SSL_DIRECTORY"/mongodb.crt 2> /dev/null
+    openssl $OPTS -subj "$SUBJ" -keyout "$ssl_key_file" -out "$ssl_cert_file" 2> /dev/null
   fi
 
-  cat "$SSL_DIRECTORY/mongodb.key" "$SSL_DIRECTORY/mongodb.crt" > "$SSL_DIRECTORY/mongodb.pem"
+  cat "$ssl_key_file" "$ssl_cert_file" > "$SSL_BUNDLE_FILE"
 }
 
 
@@ -161,7 +167,7 @@ function startMongod () {
     "--dbpath" "$DATA_DIRECTORY"
     "--port" "$PORT"
     "--sslMode" "$MONGO_SSL_MODE"
-    "--sslPEMKeyFile" "$SSL_DIRECTORY/mongodb.pem"
+    "--sslPEMKeyFile" "$SSL_BUNDLE_FILE"
     "--auth"
   )
 
@@ -175,6 +181,8 @@ function startMongod () {
     echo "WARNING: Starting in STANDALONE mode (${REPL_SET_NAME_FILE} or ${CLUSTER_KEY_FILE} is missing)."
   fi
 
+  unset SSL_CERTIFICATE
+  unset SSL_KEY
   exec mongod "${mongo_options[@]}"
 }
 
@@ -311,7 +319,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   echo "Starting MongoDB"
   mongo_initialize_certs
-  mongod --dbpath "$DATA_DIRECTORY" --port "$PORT" --fork --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" --replSet "$REPL_SET_NAME" --keyFile "$CLUSTER_KEY_FILE" --sslMode "$MONGO_SSL_MODE" --sslPEMKeyFile "$SSL_DIRECTORY/mongodb.pem" --auth
+  mongod --dbpath "$DATA_DIRECTORY" --port "$PORT" --fork --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" --replSet "$REPL_SET_NAME" --keyFile "$CLUSTER_KEY_FILE" --sslMode "$MONGO_SSL_MODE" --sslPEMKeyFile "$SSL_BUNDLE_FILE" --auth
 
   # Initate replication, from the primary Point it to the new replica we just launched.
   echo "Registering as nonvoting secondary"

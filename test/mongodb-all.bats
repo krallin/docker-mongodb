@@ -70,3 +70,37 @@ source "${BATS_TEST_DIRNAME}/test_helpers.sh"
   wait_for_mongodb
   grep "STANDALONE" "$BATS_TEST_DIRNAME/mongodb.log"
 }
+
+@test "It should reuse existing ssl cert / key files" {
+  initialize_mongodb
+  make_certs "TESTMONGODB"
+  wait_for_mongodb
+
+  grep "Certs present on filesystem" "$BATS_TEST_DIRNAME/mongodb.log"
+  # Curl isn't exactly the right tool to talk to MongoDB, but it works
+  # well and predictably (whereas openssl s_client refuses to close the
+  # connection and hangs).
+  curl -kv https://localhost:27017 2>&1 | grep "TESTMONGODB"
+}
+
+@test "It should prioritize ssl cert / key files from the environment" {
+  initialize_mongodb
+
+  make_certs "TESTMONGODB"
+  export SSL_CERTIFICATE="$(cat "${SSL_DIRECTORY}/mongodb.crt")"
+  export SSL_KEY="$(cat "${SSL_DIRECTORY}/mongodb.key")"
+  rm "${SSL_DIRECTORY}/mongodb.key" "${SSL_DIRECTORY}/mongodb.crt"
+
+  make_certs "WRONGMONGODB"
+  wait_for_mongodb
+
+  grep "Certs present in environment" "$BATS_TEST_DIRNAME/mongodb.log"
+  curl -kv https://localhost:27017 2>&1 | grep "TESTMONGODB"
+}
+
+@test "It should auto-generate certs when none are provided" {
+  initialize_mongodb
+  wait_for_mongodb
+  grep "No certs found" "$BATS_TEST_DIRNAME/mongodb.log"
+  curl -kv https://localhost:27017 2>&1 | grep "mongodb.example.com"
+}
