@@ -31,7 +31,9 @@ ADD templates/mongo-scripts /mongo-scripts
 # Integration tests
 ADD <%= ENV.fetch 'TAG' %>/test /tmp/test
 ADD test /tmp/test
-RUN bats /tmp/test
+RUN apt-install curl \
+ && bats /tmp/test \
+ && apt-get remove -y curl && apt-get -y autoremove
 
 VOLUME ["$DATA_DIRECTORY"]
 VOLUME ["$SSL_DIRECTORY"]
