@@ -181,6 +181,8 @@ function startMongod () {
     echo "WARNING: Starting in STANDALONE mode (${REPL_SET_NAME_FILE} or ${CLUSTER_KEY_FILE} is missing)."
   fi
 
+  unset SSL_CERTIFICATE
+  unset SSL_KEY
   exec mongod "${mongo_options[@]}"
 }
 
