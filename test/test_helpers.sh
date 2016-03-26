@@ -33,6 +33,8 @@ teardown() {
   PID=$(pgrep mongod) || return 0
   run pkill mongod
   while [ -n "$PID" ] && [ -e "/proc/${PID}" ]; do sleep 0.1; done
+  rm -rf "$DATA_DIRECTORY"
+  rm -rf "$SSL_DIRECTORY"
 }
 
 initialize_mongodb() {
