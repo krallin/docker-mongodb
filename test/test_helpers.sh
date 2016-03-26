@@ -21,6 +21,8 @@ teardown() {
   # Dump log, if any (facilitates troubleshooting)
   cat "$BATS_TEST_DIRNAME/mongodb.log" || true
   # Actually teardown
+  rm -rf "$DATA_DIRECTORY"
+  rm -rf "$SSL_DIRECTORY"
   export DATA_DIRECTORY="$OLD_DATA_DIRECTORY"
   export SSL_DIRECTORY="$OLD_SSL_DIRECTORY"
   unset OLD_DATA_DIRECTORY
@@ -33,8 +35,6 @@ teardown() {
   PID=$(pgrep mongod) || return 0
   run pkill mongod
   while [ -n "$PID" ] && [ -e "/proc/${PID}" ]; do sleep 0.1; done
-  rm -rf "$DATA_DIRECTORY"
-  rm -rf "$SSL_DIRECTORY"
 }
 
 initialize_mongodb() {
