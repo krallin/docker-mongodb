@@ -197,14 +197,20 @@ if docker logs "$R1_CONTAINER" | grep "relinquishing primary"; then
   exit 1
 fi
 
-# But also check that R1 noticed R2 was down. The log message differs in Mongo 2.x and 3.x, so
-# we test for both (2.x first, then 3.x)
+# But also check that R1 noticed R2 was down. The log message differs in Mongo
+# 2.x, 3.0 and 3.2, so we test for both (2.x first, then 3.0, then 3.2)
 if ! docker logs "$R1_CONTAINER" | grep "${R2_CONTAINER}:${R2_PORT} is now in state DOWN"; then
   if ! docker logs "$R1_CONTAINER" | grep "${R2_CONTAINER}:${R2_PORT}; ExceededTimeLimit"; then
     # This isn't technically a test *failure*. However, we were unable to *demonstrate* that the
     # system reacted properly to R2 going down for a restart, so we have to abort.
-    echo "${R1_CONTAINER} did not realize that ${R2_CONTAINER} went down - aborting test"
-    exit 1
+    docker logs "$R1_CONTAINER"
+    if [[ "$TAG" = "3.0" ]]; then
+      # Unfortunately, 3.0 doesn't have a message we can use here :/
+      echo "Skipping down check for MongoDB 3.0"
+    else
+      echo "${R1_CONTAINER} did not realize that ${R2_CONTAINER} went down - aborting test"
+      exit 1
+    fi
   fi
 fi
 
