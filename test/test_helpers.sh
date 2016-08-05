@@ -5,7 +5,7 @@ setup() {
   export OLD_SSL_DIRECTORY="$SSL_DIRECTORY"
   export DATA_DIRECTORY=/tmp/datadir
   export SSL_DIRECTORY=/tmp/ssldir
-  export QUERY="printjson(db.getCollectionNames())"
+  export QUERY="rs.slaveOk(); printjson(db.getCollectionNames())"
   export DATABASE_USER="aptible"
   export DATABASE_PASSWORD="password12345"
   export DATABASE_CLUSTER_KEY="key1234"
