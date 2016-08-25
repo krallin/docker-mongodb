@@ -7,7 +7,6 @@ services:
 env:
   matrix:
     - TAG=2.6
-    - TAG=3.0
     - TAG=3.2
 
 script:
