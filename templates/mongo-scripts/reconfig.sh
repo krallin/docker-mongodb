@@ -31,6 +31,3 @@ SECONDARY_NAME="$(find_secondary_name )"
 
 run-database.sh --client "$PRIMARY_URL" --eval "var secondary_name='$SECONDARY_NAME'" "/mongo-scripts/primary-enable-secondary.js"
 echo "Reconfigured primary!"
-
-mv "$0" "${0}.$(date --iso-8601=seconds).bak"
-echo "Moved this file out"

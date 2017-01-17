@@ -336,6 +336,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   cat > "$PRE_START_FILE" <<EOM
 #!/bin/bash
 /mongo-scripts/reconfig.sh "$PRIMARY_URL" "$SECONDARY_URL" &
+mv "\$0" "$\{0}.$\(date --iso-8601=seconds).bak"
 EOM
   chmod +x "$PRE_START_FILE"
 
