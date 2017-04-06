@@ -61,7 +61,7 @@ wait_for_mongo
 
 echo "DB came back online; checking for clean shutdown and recovery"
 date
-docker logs "$MONGO_CONTAINER" 2>&1 | grep -qiE "dbexit.*(rc: 0|really exit)"
+docker logs "$MONGO_CONTAINER" 2>&1 | grep -qiE "(dbexit.*(rc: 0|really exit))|(shutting down with code:0)"
 docker logs "$MONGO_CONTAINER" 2>&1 | grep -qiE "(this node is.*in the config|replSet I am)"
 docker logs "$MONGO_CONTAINER" 2>&1 | grep -vqiE "(recovering data from the last clean checkpoint|recover done)"
 
