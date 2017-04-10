@@ -1,1 +1,1 @@
-LATEST_TAG = 3.2
+LATEST_TAG = 3.4
