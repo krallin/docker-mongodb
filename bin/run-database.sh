@@ -270,8 +270,7 @@ elif [[ "$1" == "--initialize-backup" ]]; then
   echo "$CLUSTER_KEY" > "$CLUSTER_KEY_FILE"
   chmod 600 "$CLUSTER_KEY_FILE"
 
-  OLD_REPL_SET_NAME="$(cat "$REPL_SET_NAME_FILE")"
-
+  # Generate a new replica set name
   REPL_SET_NAME="rs$(pwgen -s 12)"
   echo "$REPL_SET_NAME" > "$REPL_SET_NAME_FILE"
 
@@ -301,9 +300,7 @@ elif [[ "$1" == "--initialize-backup" ]]; then
   done
 
   # Delete the old replica set
-  mongo "${mongo_options[@]}" \
-    --eval "var replica_set_name = '${OLD_REPL_SET_NAME}';" \
-    "/mongo-scripts/remove-replica-set.js"
+  mongo "${mongo_options[@]}" "/mongo-scripts/remove-replica-set.js"
 
   # Shut it down
   kill "$(cat "$PID_PATH_STAGE_1")"
