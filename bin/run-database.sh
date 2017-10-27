@@ -95,6 +95,7 @@ function mongo_environment_prefer_cluster_key () {
   fi
 }
 
+
 function mongo_environment_require_cluster_key () {
   # When using --initialize-from, we *need* the CLUSTER_KEY: there's no
   # use attempting to join a replica set we don't have the credentials ot
@@ -163,7 +164,7 @@ function startMongod () {
   fi
 
   # Standalone configuration
-  local mongo_options=(
+  local mongod_options=(
     "--dbpath" "$DATA_DIRECTORY"
     "--port" "$PORT"
     "--sslMode" "$MONGO_SSL_MODE"
@@ -173,7 +174,7 @@ function startMongod () {
 
   if [ -f "$REPL_SET_NAME_FILE" ] && [ -f "$CLUSTER_KEY_FILE" ]; then
     # We have replica set configuration! Start with replica set options.
-    mongo_options+=(
+    mongod_options+=(
       "--replSet" "$(cat "$REPL_SET_NAME_FILE")"
       "--keyFile" "$CLUSTER_KEY_FILE"
     )
@@ -183,7 +184,7 @@ function startMongod () {
 
   unset SSL_CERTIFICATE
   unset SSL_KEY
-  exec mongod "${mongo_options[@]}"
+  exec mongod "${mongod_options[@]}"
 }
 
 dump_directory="mongodump"
@@ -217,39 +218,44 @@ elif [[ "$1" == "--initialize" ]]; then
   # Initialize MongoDB
   PID_PATH=/tmp/mongod.pid
   LOG_PATH=/tmp/mongod.log
-  trap 'cat "$LOG_PATH"; rm "$LOG_PATH"' EXIT
+  trap 'cat "$LOG_PATH"; rm "$LOG_PATH"; rm "$PID_PATH"' EXIT
 
   # Start MongoDB. We're only going to connect locally here; we don't enable auth or SSL.
-  mongod --dbpath "$DATA_DIRECTORY" --port "$PORT" --fork --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" --replSet "$REPL_SET_NAME"
+  mongod \
+    --dbpath "$DATA_DIRECTORY" \
+    --port "$PORT" \
+    --fork \
+    --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" \
+    --replSet "$REPL_SET_NAME"
 
-  mongo_options="--port $PORT"
+  mongo_options=("--port" "$PORT")
 
   # Wait until MongoDB comes online
-  # shellcheck disable=2086
-  until mongo $mongo_options --quiet --eval 'quit(0)'; do
+  until mongo "${mongo_options[@]}" --quiet --eval 'quit(0)'; do
     echo "Waiting until MongoDB comes online"
     sleep 2
   done
 
   # Initialize replica set configuration using the host we were provided. Since we're using --initialize,
   # we'll force the host _id to 0 (we're guaranteed that --initialize only runs once per replica set).
-  # shellcheck disable=2086
-  mongo $mongo_options --eval "var replica_set_name = '${REPL_SET_NAME}', primary_member_id = 0, primary_host = '${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}';" "/mongo-scripts/primary-initiate-replica-set.js"
+  mongo "${mongo_options[@]}" \
+    --eval "var replica_set_name = '${REPL_SET_NAME}', primary_member_id = 0, primary_host = '${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}';" \
+    "/mongo-scripts/primary-initiate-replica-set.js"
 
   # Wait until MongoDB node becomes primary
-  # shellcheck disable=2086
-  until mongo $mongo_options --quiet --eval 'quit(db.isMaster()["ismaster"] ? 0 : 1)'; do
+  until mongo "${mongo_options[@]}" --quiet --eval 'quit(db.isMaster()["ismaster"] ? 0 : 1)'; do
     echo "Waiting until new MongoDB instance becomes primary"
     sleep 2
   done
 
   # Create users using the connection URL that was provided
-  # shellcheck disable=2086
-  mongo $mongo_options --eval "var user_db = '${DATABASE}', user_name = '${USERNAME}', user_passphrase = '${PASSPHRASE}';" "/mongo-scripts/primary-add-user-permissions.js"
+  mongo "${mongo_options[@]}" \
+    --eval "var user_db = '${DATABASE}', user_name = '${USERNAME}', user_passphrase = '${PASSPHRASE}';" \
+    "/mongo-scripts/primary-add-user-permissions.js"
 
   # Terminate MongoDB and wait for it to exit
   kill "$(cat "$PID_PATH")"
-  while [ -s "$DATA_DIRECTORY"/mongod.lock ]; do sleep 0.1; done
+  while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
 
 elif [[ "$1" == "--initialize-from" ]]; then
   if [[ "$#" -lt 2 ]]; then
@@ -270,8 +276,8 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   # Now, get the *actual* primary from that URL
   echo "Locating replica set primary"
-  # shellcheck disable=2154 disable=2086
-  PRIMARY_HOST_PORT="$(mongo_exec_and_extract "/mongo-scripts/secondary-find-primary.js" $mongo_options admin)"
+  # shellcheck disable=2154
+  PRIMARY_HOST_PORT="$(mongo_exec_and_extract "/mongo-scripts/secondary-find-primary.js" "${mongo_options[@]}" admin)"
 
   # Reconstruct primary URL using the credentials we were provided.
   # TODO - Consider using system and keyfile creds?
@@ -279,10 +285,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   PRIMARY_URL="mongodb://${username}:${password}@${PRIMARY_HOST_PORT}/admin?ssl=true&x-sslVerify=false"
 
   parse_url "$PRIMARY_URL"
-  # shellcheck disable=2154
-  {
-    PRIMARY_OPTIONS="$mongo_options"
-  }
+  PRIMARY_OPTIONS=("${mongo_options[@]}")
 
   # Create key file using cluster key that was provided in the environment.
   echo "$CLUSTER_KEY" > "$CLUSTER_KEY_FILE"
@@ -292,8 +295,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # things like SSL errors to stdout, so we can't really just get the output of db.runCommand and expect that
   # to match out replica set name.
   echo "Retrieving replica set name"
-  # shellcheck disable=2154 disable=2086
-  REPL_SET_NAME="$(mongo_exec_and_extract "/mongo-scripts/secondary-get-replica-set-name.js" $PRIMARY_OPTIONS admin)"
+  REPL_SET_NAME="$(mongo_exec_and_extract "/mongo-scripts/secondary-get-replica-set-name.js" "${PRIMARY_OPTIONS[@]}" admin)"
   echo "$REPL_SET_NAME" > "$REPL_SET_NAME_FILE"
 
   # Autogenerate a random member ID. This makes it easier for us to update our votes and priority later on,
@@ -302,8 +304,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   # will fail (and exit with an error), and the `--initialize-from` operation needs to be restarted.
   echo "Choosing member ID"
   MEMBER_ID="$(randint_8)"
-  # shellcheck disable=2086
-  until mongo $PRIMARY_OPTIONS admin --eval "var member_id = ${MEMBER_ID};" "/mongo-scripts/primary-test-member-id.js"; do
+  until mongo "${PRIMARY_OPTIONS[@]}" admin --eval "var member_id = ${MEMBER_ID};" "/mongo-scripts/primary-test-member-id.js"; do
     echo "Member ID ${MEMBER_ID} is in use - trying another one"
     MEMBER_ID="$(randint_8)"
   done
@@ -320,12 +321,22 @@ elif [[ "$1" == "--initialize-from" ]]; then
 
   echo "Starting MongoDB"
   mongo_initialize_certs
-  mongod --dbpath "$DATA_DIRECTORY" --port "$PORT" --fork --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" --replSet "$REPL_SET_NAME" --keyFile "$CLUSTER_KEY_FILE" --sslMode "$MONGO_SSL_MODE" --sslPEMKeyFile "$SSL_BUNDLE_FILE" --auth
+  mongod \
+    --dbpath "$DATA_DIRECTORY" \
+    --port "$PORT" \
+    --fork --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" \
+    --replSet "$REPL_SET_NAME" \
+    --keyFile "$CLUSTER_KEY_FILE" \
+    --sslMode "$MONGO_SSL_MODE" --sslPEMKeyFile "$SSL_BUNDLE_FILE" \
+    --auth
 
   # Initate replication, from the primary Point it to the new replica we just launched.
   echo "Registering as nonvoting secondary"
-  # shellcheck disable=2086
-  mongo $PRIMARY_OPTIONS admin --quiet --eval "var secondary_member_id = $MEMBER_ID, secondary_host = '${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}';" "/mongo-scripts/primary-add-nonvoting-secondary.js"
+  mongo \
+    "${PRIMARY_OPTIONS[@]}" admin \
+    --quiet \
+    --eval "var secondary_member_id = $MEMBER_ID, secondary_host = '${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}';" \
+    "/mongo-scripts/primary-add-nonvoting-secondary.js"
 
   # Determine the URL this replica will acquire (and check its validity by parsing it - we'll use it later anyway)
   SECONDARY_URL="mongodb://${USERNAME}:${PASSPHRASE}@${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}/admin?ssl=true&x-sslVerify=false"
@@ -342,8 +353,9 @@ EOM
 
   # Wait until we actually join the cluster.
   echo "Waiting until initial synchronization completes"
-  # shellcheck disable=2154 disable=2086
-  until mongo $mongo_options "$database" --quiet --eval 'quit((db.isMaster()["ismaster"] || db.isMaster()["secondary"]) ? 0 : 1)'; do
+
+  # shellcheck disable=2154
+  until mongo "${mongo_options[@]}" "$database" --quiet --eval 'quit((db.isMaster()["ismaster"] || db.isMaster()["secondary"]) ? 0 : 1)'; do
     echo "Waiting until new MongoDB instance becomes primary or secondary"
     sleep 2
   done
@@ -380,11 +392,12 @@ elif [[ "$1" == "--client" ]]; then
     echo "docker run -it aptible/mongodb --client mongodb://... [...]"
     exit 1
   fi
-  parse_url "$2"
   shift
+
+  parse_url "$1"
   shift
-  # shellcheck disable=2154 disable=2086
-  exec mongo $mongo_options "$database" "$@"
+
+  exec mongo "${mongo_options[@]}" "$database" "$@"
 
 elif [[ "$1" == "--dump" ]]; then
   if [[ "$#" -ne 2 ]]; then
@@ -396,8 +409,7 @@ elif [[ "$1" == "--dump" ]]; then
   # dump to a directory and then tar the directory and print the tar to stdout.
   parse_url "$2"
 
-  # shellcheck disable=2154 disable=2086
-  mongodump $mongo_options --db="$database" --out="/tmp/${dump_directory}" > /dev/null && tar cf - -C /tmp/ "$dump_directory"
+  mongodump "${mongo_options[@]}" --db="$database" --out="/tmp/${dump_directory}" > /dev/null && tar cf - -C /tmp/ "$dump_directory"
 
 elif [[ "$1" == "--restore" ]]; then
   if [[ "$#" -ne 2 ]]; then
@@ -406,8 +418,7 @@ elif [[ "$1" == "--restore" ]]; then
   fi
   tar xf - -C /tmp/
   parse_url "$2"
-  # shellcheck disable=2154 disable=2086
-  mongorestore $mongo_options --db="$database" "/tmp/${dump_directory}/${database}"
+  mongorestore "${mongo_options[@]}" --db="$database" "/tmp/${dump_directory}/${database}"
 
 elif [[ "$1" == "--readonly" ]]; then
   # MongoDB only supports read-only mode on a per-user basis. To make that

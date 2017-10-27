@@ -55,16 +55,16 @@ def prepare_options(u):
 
     # Prepare our Mongo options
     options = [
-        "--host", quote(u.hostname),
-        "--port", quote(str(u.port or DEFAULT_MONGO_PORT)),
+        "--host", u.hostname,
+        "--port", str(u.port or DEFAULT_MONGO_PORT),
     ]
 
     for opt, val in zip(["username", "password"], [u.username, u.password]):
         if val:
-            options.extend(["--{0}".format(opt), quote(val)])
+            options.extend(["--{0}".format(opt), val])
 
     if use_ssl:
-        options.extend(["--ssl", "--sslCAFile", quote(SSL_CA_FILE)])
+        options.extend(["--ssl", "--sslCAFile", SSL_CA_FILE])
         if not check_ssl:
             options.append("--sslAllowInvalidCertificates")
 
@@ -74,7 +74,7 @@ def prepare_options(u):
         "username": u.username,
         "password": u.password,
         "database": u.path.lstrip('/'),
-        "mongo_options": " ".join(options)
+        "mongo_options": options
     }
 
 
@@ -91,7 +91,12 @@ def main(mongo_url):
 
     # And now provide this to the shell
     for k, v in prepare_options(u).items():
-        print "{0}={1}".format(k, quote(str(v)))
+        if isinstance(v, list):
+            array = "({0})".format(" ".join([quote(o) for o in v]))
+            print "{0}={1}".format(k, array)
+        else:
+            print "{0}={1}".format(k, quote(str(v)))
+
 
 
 if __name__ == "__main__":
