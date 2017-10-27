@@ -2,6 +2,8 @@
 set -o errexit
 set -o nounset
 
+. ./test-helpers.sh
+
 IMG="$1"
 
 R1_CONTAINER="mongodb-r1"
@@ -28,7 +30,7 @@ function cleanup {
 }
 
 trap cleanup EXIT
-cleanup
+quietly cleanup
 
 # Helper script
 READ_SUGGESTED_CONFIG_SCRIPT='
@@ -136,14 +138,14 @@ docker network create --subnet=172.18.0.0/16 "$NET_NAME"
 
 echo "Initializing first member"
 
-docker run -i --rm \
+quietly docker run -i --rm \
   "${R1_NET_ARGS[@]}" \
   "${R1_ENV_ARGS[@]}" \
   "${NET_ARGS[@]}" \
   --volumes-from "$R1_DATA_CONTAINER" \
   "$IMG" --initialize
 
-docker run -d --name="$R1_CONTAINER" \
+quietly docker run -d --name="$R1_CONTAINER" \
   "${R1_NET_ARGS[@]}" \
   "${R1_ENV_ARGS[@]}" \
   "${NET_ARGS[@]}" \
@@ -160,7 +162,7 @@ echo "Initializing second member"
 R2_URL="$(docker run -i "${R2_ENV_ARGS[@]}" "$IMG" --connection-url | python -c "$READ_DATABASE_URL_SCRIPT")"
 R2_ADMIN_URL="$(docker run -i "${R2_ENV_ARGS[@]}" -e "DATABASE=admin" "$IMG" --connection-url | python -c "$READ_DATABASE_URL_SCRIPT")"
 
-docker run -i --rm \
+quietly docker run -i --rm \
   "${R2_NET_ARGS[@]}" \
   "${R2_ENV_ARGS[@]}" \
   "${NET_ARGS[@]}" \
@@ -213,14 +215,14 @@ validate_cluster_conf "$R2_ADMIN_URL"
 
 echo "Initializing third member from second"
 # This will only pass if the initialization script is smart enough to resolve the real primary and not rely on --initialize-from
-docker run -i --rm \
+quietly docker run -i --rm \
   "${R3_NET_ARGS[@]}" \
   "${R3_ENV_ARGS[@]}" \
   "${NET_ARGS[@]}" \
   --volumes-from "$R3_DATA_CONTAINER" \
   "$IMG" --initialize-from "$R2_URL"
 
-docker run -d --name="$R3_CONTAINER" \
+quietly docker run -d --name="$R3_CONTAINER" \
   "${R3_NET_ARGS[@]}" \
   "${R3_ENV_ARGS[@]}" \
   "${NET_ARGS[@]}" \

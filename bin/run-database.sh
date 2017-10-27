@@ -257,6 +257,84 @@ elif [[ "$1" == "--initialize" ]]; then
   kill "$(cat "$PID_PATH")"
   while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
 
+elif [[ "$1" == "--initialize-backup" ]]; then
+  # There will be no --discover when restoring, so we expect our environment to be pre-configured.
+  mongo_environment_full
+  mongo_initialize_certs
+  mongo_environment_prefer_cluster_key
+
+  # Store the CLUSTER_KEY on disk. It may not have changed during the restore,
+  # but there is no reason not to support it. In fact, we would probably want
+  # to run some re-discovery process as part of the restore to update these
+  # things.
+  echo "$CLUSTER_KEY" > "$CLUSTER_KEY_FILE"
+  chmod 600 "$CLUSTER_KEY_FILE"
+
+  OLD_REPL_SET_NAME="$(cat "$REPL_SET_NAME_FILE")"
+
+  REPL_SET_NAME="rs$(pwgen -s 12)"
+  echo "$REPL_SET_NAME" > "$REPL_SET_NAME_FILE"
+
+  # First, we're going to boot MongoDB without a replSet ID and purge the
+  # configuration
+  PID_PATH=/tmp/mongod.pid
+  LOG_PATH=/tmp/mongod.log
+  trap 'cat "$LOG_PATH"; rm "$LOG_PATH"; rm "$PID_PATH"' EXIT
+
+  # Start MongoDB. We're only going to connect locally here; we don't enable auth or SSL.
+  mongod \
+    --dbpath "$DATA_DIRECTORY" \
+    --port "$PORT" \
+    --fork \
+    --logpath "$LOG_PATH" --pidfilepath "$PID_PATH"
+
+  mongo_options=("--port" "$PORT")
+
+  # Wait until MongoDB comes online
+  until mongo "${mongo_options[@]}" --quiet --eval 'quit(0)'; do
+    echo "Waiting until MongoDB comes online"
+    sleep 2
+  done
+
+  # Delete the old replica set
+  mongo "${mongo_options[@]}" \
+    --eval "var replica_set_name = '${OLD_REPL_SET_NAME}';" \
+    "/mongo-scripts/remove-replica-set.js"
+
+  # Shut it down
+  kill "$(cat "$PID_PATH")"
+  while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
+  rm "$LOG_PATH" "$PID_PATH"
+
+  # Boot back up, this time with the new replica set
+  mongod \
+    --dbpath "$DATA_DIRECTORY" \
+    --port "$PORT" \
+    --fork \
+    --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" \
+    --replSet "$REPL_SET_NAME"
+
+  # Wait until MongoDB comes online
+  until mongo "${mongo_options[@]}" --quiet --eval 'quit(0)'; do
+    echo "Waiting until MongoDB comes online"
+    sleep 2
+  done
+
+  # Initialize the new replica set.
+  mongo "${mongo_options[@]}" \
+    --eval "var replica_set_name = '${REPL_SET_NAME}', primary_member_id = 0, primary_host = '${EXPOSE_HOST}:${!EXPOSE_PORT_PTR}';" \
+    "/mongo-scripts/primary-initiate-replica-set.js"
+
+  # Wait until MongoDB node becomes primary
+  until mongo "${mongo_options[@]}" --quiet --eval 'quit(db.isMaster()["ismaster"] ? 0 : 1)'; do
+    echo "Waiting until new MongoDB instance becomes primary"
+    sleep 2
+  done
+
+  # All done
+  kill "$(cat "$PID_PATH")"
+  while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
+
 elif [[ "$1" == "--initialize-from" ]]; then
   if [[ "$#" -lt 2 ]]; then
     echo "docker run -it aptible/mongodb --initialize-from mongodb://..."
