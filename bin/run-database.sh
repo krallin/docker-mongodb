@@ -277,16 +277,20 @@ elif [[ "$1" == "--initialize-backup" ]]; then
 
   # First, we're going to boot MongoDB without a replSet ID and purge the
   # configuration
-  PID_PATH=/tmp/mongod.pid
-  LOG_PATH=/tmp/mongod.log
-  trap 'cat "$LOG_PATH"; rm "$LOG_PATH"; rm "$PID_PATH"' EXIT
+  PID_PATH_STAGE_1=/tmp/mongod-1.pid
+  LOG_PATH_STAGE_1=/tmp/mongod-1.log
+
+  PID_PATH_STAGE_2=/tmp/mongod-2.pid
+  LOG_PATH_STAGE_2=/tmp/mongod-2.log
+
+  trap 'cat "$LOG_PATH_STAGE_1" "$LOG_PATH_STAGE_2"; rm "$LOG_PATH_STAGE_1" "$LOG_PATH_STAGE_2" "$PID_PATH_STAGE_1" "$PID_PATH_STAGE_2"' EXIT
 
   # Start MongoDB. We're only going to connect locally here; we don't enable auth or SSL.
   mongod \
     --dbpath "$DATA_DIRECTORY" \
     --port "$PORT" \
     --fork \
-    --logpath "$LOG_PATH" --pidfilepath "$PID_PATH"
+    --logpath "$LOG_PATH_STAGE_1" --pidfilepath "$PID_PATH_STAGE_1"
 
   mongo_options=("--port" "$PORT")
 
@@ -302,16 +306,15 @@ elif [[ "$1" == "--initialize-backup" ]]; then
     "/mongo-scripts/remove-replica-set.js"
 
   # Shut it down
-  kill "$(cat "$PID_PATH")"
+  kill "$(cat "$PID_PATH_STAGE_1")"
   while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
-  rm "$LOG_PATH" "$PID_PATH"
 
   # Boot back up, this time with the new replica set
   mongod \
     --dbpath "$DATA_DIRECTORY" \
     --port "$PORT" \
     --fork \
-    --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" \
+    --logpath "$LOG_PATH_STAGE_2" --pidfilepath "$PID_PATH_STAGE_2" \
     --replSet "$REPL_SET_NAME"
 
   # Wait until MongoDB comes online
@@ -332,7 +335,7 @@ elif [[ "$1" == "--initialize-backup" ]]; then
   done
 
   # All done
-  kill "$(cat "$PID_PATH")"
+  kill "$(cat "$PID_PATH_STAGE_2")"
   while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
 
 elif [[ "$1" == "--initialize-from" ]]; then
