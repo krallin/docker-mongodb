@@ -2,9 +2,9 @@
 
 source "${BATS_TEST_DIRNAME}/test_helpers.sh"
 
-@test "It should install mongod 3.2" {
+@test "It should install mongod 3.2.17" {
   run mongod --version
-  [[ "$output" =~ "db version v3.2.1"  ]]
+  [[ "$output" =~ "db version v3.2.17"  ]]
 }
 
 @test "It should install mongo tools to /usr/bin" {
