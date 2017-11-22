@@ -26,6 +26,7 @@ RUN mkdir -p "${DATA_DIRECTORY}" "${SSL_DIRECTORY}"
 ADD bin/run-database.sh /usr/bin/
 ADD bin/parse_mongo_url.py /usr/bin/
 ADD bin/utilities.sh /usr/bin/
+ADD bin/autotune /usr/local/bin/
 
 ADD templates/mongo-scripts /mongo-scripts
 

@@ -172,6 +172,10 @@ function startMongod () {
     "--auth"
   )
 
+  mongod_options+=(
+    $(/usr/local/bin/autotune)
+  )
+
   if [ -f "$REPL_SET_NAME_FILE" ] && [ -f "$CLUSTER_KEY_FILE" ]; then
     # We have replica set configuration! Start with replica set options.
     mongod_options+=(
