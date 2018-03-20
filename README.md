@@ -21,10 +21,10 @@ The first command sets up a data container named `data` which will hold the conf
 
 ## Available Tags
 
-* `latest`: Currently MongoDB 3.4.10
-* `2.6`: MongoDB 2.6.11
-* `3.2`: MongoDB 3.2.17
-* `3.4`: MongoDB 3.4.10
+* `latest`: Currently MongoDB 3.4
+* `2.6`: MongoDB 2.6
+* `3.2`: MongoDB 3.2
+* `3.4`: MongoDB 3.4
 
 ## Tests
 
