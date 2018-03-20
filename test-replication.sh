@@ -57,8 +57,12 @@ DATABASE=db  # TODO: test with custom DB
 # It's the suggested_configuration obtained from --discover, to which we add
 # USERNAME, DATABASE, EXPOSE_HOST and EXPOSE_PORT_XXXXX.
 
-ENV_ARGS=()
-ENV_ARGS=("-e" "USERNAME=$USER" "-e" "PASSPHRASE=$PASSPHRASE" "-e" "DATABASE=$DATABASE")
+ENV_ARGS=(
+  "-e" "USERNAME=$USER"
+  "-e" "PASSPHRASE=$PASSPHRASE"
+  "-e" "DATABASE=$DATABASE"
+  "-e" "INITIALIZATION_ALLOW_INVALID_CERTIFICATES=1"
+)
 
 # If ENABLE_DEBUG is set in our environment, we'll pass it through to the container environment,
 # enable xtrace here, and disable cleanup.
@@ -190,7 +194,7 @@ fi
 
 # But also check that R1 noticed R2 was down. The log message differs in Mongo
 # 2.6, 3.2, so we test for both (2.6 first, then 3.2)
-if ! docker logs "$R1_CONTAINER" | grep "${R2_CONTAINER}:${R2_PORT} is now in state DOWN"; then
+if ! docker logs "$R1_CONTAINER" | grep -E "${R2_CONTAINER}:${R2_PORT} is now in state (DOWN|RS_DOWN)"; then
   if ! docker logs "$R1_CONTAINER" | grep "${R2_CONTAINER}:${R2_PORT}; ExceededTimeLimit"; then
     # This isn't technically a test *failure*. However, we were unable to *demonstrate* that the
     # system reacted properly to R2 going down for a restart, so we have to abort.

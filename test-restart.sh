@@ -4,6 +4,38 @@ set -o nounset
 
 . ./test-helpers.sh
 
+function _wait_for_mongo_exec {
+  local container="$1"
+  local command="$2"
+
+  local mongo_args=(
+    "--ssl" "--sslAllowInvalidCertificates"
+    "--quiet"
+    "--eval" "$command"
+  )
+
+  for _ in $(seq 1 1000); do
+    if docker exec -it "$container" mongo "${mongo_args[@]}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  return 1;
+}
+
+function wait_for_mongo {
+  local container="$1"
+
+  if _wait_for_mongo_exec "$container" "quit(0)"; then
+    return 0
+  fi
+
+  echo "DB never came online"
+  docker logs "$container"
+  return 1
+}
+
 IMG="$1"
 
 MONGO_CONTAINER="mongo"
@@ -23,6 +55,7 @@ docker create --name "$DATA_CONTAINER" "$IMG"
 echo "Starting DB"
 quietly docker run -it --rm \
   -e USERNAME=user -e PASSPHRASE=pass -e DATABASE=db \
+  -e INITIALIZATION_ALLOW_INVALID_CERTIFICATES=1 \
   -e EXPOSE_HOST=127.0.0.1 -e EXPOSE_PORT_27217=27217 \
   --volumes-from "$DATA_CONTAINER" \
   "$IMG" --initialize

@@ -13,6 +13,7 @@ setup() {
   export DATABASE_URL="$DATABASE_URL_NO_SSL?ssl=true&x-sslVerify=false"
   export ADMIN_DATABASE_URL="mongodb://$DATABASE_USER:$DATABASE_PASSWORD@localhost/admin?ssl=true&x-sslVerify=false"
   export PRINT_RAM_QUERY="print(db.serverStatus()['wiredTiger']['cache']['maximum bytes configured'] / 1024 / 1024)"
+  export INITIALIZATION_ALLOW_INVALID_CERTIFICATES=1
   rm -rf "$DATA_DIRECTORY"
   rm -rf "$SSL_DIRECTORY"
   mkdir -p "$DATA_DIRECTORY"
