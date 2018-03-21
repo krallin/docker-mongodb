@@ -9,6 +9,7 @@ env:
     - TAG=2.6
     - TAG=3.2
     - TAG=3.4
+    - TAG=3.6
 
 script:
   - make build

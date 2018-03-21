@@ -157,7 +157,7 @@ function mongo_exec_and_extract () {
 }
 
 
-function startMongod () {
+function mongo_exec_foreground_exposed () {
   # Run the "PRE_START_FILE" if provided
   if [ -f "$PRE_START_FILE" ]; then
     "$PRE_START_FILE"
@@ -166,12 +166,14 @@ function startMongod () {
   # Standalone configuration
   local mongod_options=(
     "--dbpath" "$DATA_DIRECTORY"
+    "--bind_ip" "0.0.0.0"
     "--port" "$PORT"
     "--sslMode" "$MONGO_SSL_MODE"
     "--sslPEMKeyFile" "$SSL_BUNDLE_FILE"
     "--auth"
   )
 
+  # Add autotune configuration
   mongod_options+=(
     $(/usr/local/bin/autotune)
   )
@@ -191,6 +193,87 @@ function startMongod () {
   exec mongod "${mongod_options[@]}"
 }
 
+function mongo_exposed_connection_options {
+  local opts=(
+    "--host" "$EXPOSE_HOST"
+    "--port" "${!EXPOSE_PORT_PTR}"
+    "--username" "$USERNAME"
+    "--password" "$PASSPHRASE"
+    "--authenticationDatabase" "admin"
+    "--ssl"
+  )
+
+  if [[ -n "${INITIALIZATION_ALLOW_INVALID_CERTIFICATES:-}" ]]; then
+    opts+=("--sslAllowInvalidCertificates")
+  fi
+
+  echo "${opts[@]}"
+}
+
+function mongo_wait {
+  for _ in $(seq 1 30); do
+    if mongo "$@" --quiet --eval 'quit(0)'; then
+      return 0
+    fi
+
+    sleep 2
+  done
+
+  return 1
+}
+
+function mongo_wait_local {
+  mongo_wait --port "$PORT"
+}
+
+function mongo_wait_exposed {
+  # shellcheck disable=SC2046
+  mongo_wait $(mongo_exposed_connection_options)
+}
+
+function mongo_start_background_local () {
+  local pidPath="$1"
+  local logPath="$2"
+
+  mongod \
+    --dbpath "$DATA_DIRECTORY" \
+    --bind_ip "127.0.0.1" \
+    --port "$PORT" \
+    --fork \
+    --logpath "$logPath" \
+    --pidfilepath "$pidPath"
+
+  mongo_wait_local
+}
+
+function mongo_start_background_exposed () {
+  local pidPath="$1"
+  local logPath="$2"
+  local replSet="$3"
+
+  mongod \
+    --dbpath "$DATA_DIRECTORY" \
+    --bind_ip "0.0.0.0" \
+    --port "$PORT" \
+    --fork \
+    --logpath "$logPath" \
+    --pidfilepath "$pidPath" \
+    --replSet "$replSet" \
+    --auth \
+    --sslMode "$MONGO_SSL_MODE" \
+    --sslPEMKeyFile "$SSL_BUNDLE_FILE"
+
+  mongo_wait_exposed
+}
+
+function mongo_shutdown_background () {
+  local pidPath="$1"
+
+  # Terminate MongoDB and wait for it to exit
+  kill "$(cat "$pidPath")"
+  while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
+}
+
 dump_directory="mongodump"
 
 # If requested, enable debug before anything.
@@ -199,7 +282,7 @@ mongo_init_debug
 if [[ "$#" -eq 0 ]]; then
   mongo_environment_minimal
   mongo_initialize_certs
-  startMongod
+  mongo_exec_foreground_exposed
 
 elif [[ "$1" == "--initialize" ]]; then
   mongo_environment_full
@@ -220,25 +303,33 @@ elif [[ "$1" == "--initialize" ]]; then
   chmod 600 "$CLUSTER_KEY_FILE"
 
   # Initialize MongoDB
-  PID_PATH=/tmp/mongod.pid
-  LOG_PATH=/tmp/mongod.log
-  trap 'cat "$LOG_PATH"; rm "$LOG_PATH"; rm "$PID_PATH"' EXIT
+  PID_PATH_STAGE_1=/tmp/mongod-1.pid
+  LOG_PATH_STAGE_1=/tmp/mongod-1.log
 
-  # Start MongoDB. We're only going to connect locally here; we don't enable auth or SSL.
-  mongod \
-    --dbpath "$DATA_DIRECTORY" \
-    --port "$PORT" \
-    --fork \
-    --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" \
-    --replSet "$REPL_SET_NAME"
+  PID_PATH_STAGE_2=/tmp/mongod-2.pid
+  LOG_PATH_STAGE_2=/tmp/mongod-2.log
 
-  mongo_options=("--port" "$PORT")
+  trap 'cat "$LOG_PATH_STAGE_1" "$LOG_PATH_STAGE_2"; rm "$LOG_PATH_STAGE_1" "$LOG_PATH_STAGE_2" "$PID_PATH_STAGE_1" "$PID_PATH_STAGE_2"' EXIT
 
-  # Wait until MongoDB comes online
-  until mongo "${mongo_options[@]}" --quiet --eval 'quit(0)'; do
-    echo "Waiting until MongoDB comes online"
-    sleep 2
-  done
+  mongo_start_background_local \
+    "$PID_PATH_STAGE_1" \
+    "$LOG_PATH_STAGE_1"
+
+  # Create users using the connection URL that was provided
+  mongo --port "$PORT" \
+    --eval "var user_db = '${DATABASE}', user_name = '${USERNAME}', user_passphrase = '${PASSPHRASE}';" \
+    "/mongo-scripts/primary-add-user-permissions.js"
+
+  mongo_shutdown_background "$PID_PATH_STAGE_1"
+
+  # Reboot MongoDB, this time with auth, replica set configuration, and
+  # listening on all interfaces.
+  mongo_start_background_exposed \
+    "$PID_PATH_STAGE_2" \
+    "$LOG_PATH_STAGE_2" \
+    "$REPL_SET_NAME"
+
+  mongo_options=($(mongo_exposed_connection_options))
 
   # Initialize replica set configuration using the host we were provided. Since we're using --initialize,
   # we'll force the host _id to 0 (we're guaranteed that --initialize only runs once per replica set).
@@ -252,14 +343,7 @@ elif [[ "$1" == "--initialize" ]]; then
     sleep 2
   done
 
-  # Create users using the connection URL that was provided
-  mongo "${mongo_options[@]}" \
-    --eval "var user_db = '${DATABASE}', user_name = '${USERNAME}', user_passphrase = '${PASSPHRASE}';" \
-    "/mongo-scripts/primary-add-user-permissions.js"
-
-  # Terminate MongoDB and wait for it to exit
-  kill "$(cat "$PID_PATH")"
-  while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
+  mongo_shutdown_background "$PID_PATH_STAGE_2"
 
 elif [[ "$1" == "--initialize-backup" ]]; then
   # There will be no --discover when restoring, so we expect our environment to be pre-configured.
@@ -288,41 +372,22 @@ elif [[ "$1" == "--initialize-backup" ]]; then
 
   trap 'cat "$LOG_PATH_STAGE_1" "$LOG_PATH_STAGE_2"; rm "$LOG_PATH_STAGE_1" "$LOG_PATH_STAGE_2" "$PID_PATH_STAGE_1" "$PID_PATH_STAGE_2"' EXIT
 
-  # Start MongoDB. We're only going to connect locally here; we don't enable auth or SSL.
-  mongod \
-    --dbpath "$DATA_DIRECTORY" \
-    --port "$PORT" \
-    --fork \
-    --logpath "$LOG_PATH_STAGE_1" --pidfilepath "$PID_PATH_STAGE_1"
-
-  mongo_options=("--port" "$PORT")
-
-  # Wait until MongoDB comes online
-  until mongo "${mongo_options[@]}" --quiet --eval 'quit(0)'; do
-    echo "Waiting until MongoDB comes online"
-    sleep 2
-  done
-
   # Delete the old replica set
-  mongo "${mongo_options[@]}" "/mongo-scripts/remove-replica-set.js"
+  mongo_start_background_local \
+    "$PID_PATH_STAGE_1" \
+    "$LOG_PATH_STAGE_1"
 
-  # Shut it down
-  kill "$(cat "$PID_PATH_STAGE_1")"
-  while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
+  mongo --port "$PORT" "/mongo-scripts/remove-replica-set.js"
+
+  mongo_shutdown_background "$PID_PATH_STAGE_1"
 
   # Boot back up, this time with the new replica set
-  mongod \
-    --dbpath "$DATA_DIRECTORY" \
-    --port "$PORT" \
-    --fork \
-    --logpath "$LOG_PATH_STAGE_2" --pidfilepath "$PID_PATH_STAGE_2" \
-    --replSet "$REPL_SET_NAME"
+  mongo_start_background_exposed \
+    "$PID_PATH_STAGE_2" \
+    "$LOG_PATH_STAGE_2" \
+    "$REPL_SET_NAME"
 
-  # Wait until MongoDB comes online
-  until mongo "${mongo_options[@]}" --quiet --eval 'quit(0)'; do
-    echo "Waiting until MongoDB comes online"
-    sleep 2
-  done
+  mongo_options=($(mongo_exposed_connection_options))
 
   # Initialize the new replica set.
   mongo "${mongo_options[@]}" \
@@ -335,9 +400,7 @@ elif [[ "$1" == "--initialize-backup" ]]; then
     sleep 2
   done
 
-  # All done
-  kill "$(cat "$PID_PATH_STAGE_2")"
-  while [ -s "${DATA_DIRECTORY}/mongod.lock" ]; do sleep 0.1; done
+  mongo_shutdown_background "$PID_PATH_STAGE_2"
 
 elif [[ "$1" == "--initialize-from" ]]; then
   if [[ "$#" -lt 2 ]]; then
@@ -405,6 +468,7 @@ elif [[ "$1" == "--initialize-from" ]]; then
   mongo_initialize_certs
   mongod \
     --dbpath "$DATA_DIRECTORY" \
+    --bind_ip "0.0.0.0" \
     --port "$PORT" \
     --fork --logpath "$LOG_PATH" --pidfilepath "$PID_PATH" \
     --replSet "$REPL_SET_NAME" \
@@ -517,7 +581,7 @@ elif [[ "$1" == "--readonly" ]]; then
   echo "This image does not support read-only mode. Starting database normally."
   mongo_environment_minimal
   mongo_initialize_certs
-  startMongod
+  mongo_exec_foreground_exposed
 else
   echo "Unrecognized command: $1"
   exit 1
