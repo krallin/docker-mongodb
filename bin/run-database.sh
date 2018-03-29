@@ -346,6 +346,11 @@ elif [[ "$1" == "--initialize" ]]; then
   mongo_shutdown_background "$PID_PATH_STAGE_2"
 
 elif [[ "$1" == "--initialize-backup" ]]; then
+  # No need to initialize replica set on a backup from a standalone database
+  if [[ ! -f "$REPL_SET_NAME_FILE" ]]; then
+    exit 0
+  fi
+
   # There will be no --discover when restoring, so we expect our environment to be pre-configured.
   mongo_environment_full
   mongo_initialize_certs
